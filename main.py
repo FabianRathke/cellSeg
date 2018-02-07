@@ -45,6 +45,8 @@ t_trans = tsf.Compose([
 dataset = loadData.Dataset(train_data,s_trans,t_trans)
 dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=4)
 
+parser = argparse.ArgumentParser()
+args = parser.parse_args()
 args.iterPrint = 5
 
 #model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
@@ -55,7 +57,7 @@ for epoch in range(200):
     running_loss = 0
     for i, data in enumerate(dataloader, 0):
     #for x_train, y_train in tqdm(dataloader):
-	inputs, masks = data
+        inputs, masks = data
         x_train = torch.autograd.Variable(inputs).cuda(0)
         y_train = torch.autograd.Variable(masks).cuda(0)
         optimizer.zero_grad()
@@ -67,7 +69,7 @@ for epoch in range(200):
         # statistics
         running_loss += loss.data
        	if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batches
-	    print('[%d, %5d] loss: %.3f' %
+            print('[%d, %5d] loss: %.3f' %
 	      (epoch + 1, i + 1, running_loss / args.iterPrint))
             running_loss = 0.0
 
