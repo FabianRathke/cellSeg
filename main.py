@@ -50,7 +50,11 @@ args = parser.parse_args()
 args.iterPrint = 5
 
 #model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-model = UNet2(3,1).cuda(0) # Kaggle notebook implementation
+model = UNet2(3,1) # Kaggle notebook implementation
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '2,5'
+model = nn.DataParallel(model).cuda()
+
 optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
 
 for epoch in range(200):
@@ -58,8 +62,8 @@ for epoch in range(200):
     for i, data in enumerate(dataloader, 0):
     #for x_train, y_train in tqdm(dataloader):
         inputs, masks = data
-        x_train = torch.autograd.Variable(inputs).cuda(0)
-        y_train = torch.autograd.Variable(masks).cuda(0)
+        x_train = torch.autograd.Variable(inputs).cuda()
+        y_train = torch.autograd.Variable(masks).cuda()
         optimizer.zero_grad()
         o = model(x_train)
         loss = soft_dice_loss(o, y_train)
