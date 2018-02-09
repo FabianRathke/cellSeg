@@ -57,6 +57,7 @@ class Dataset():
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
+        mask[mask > 0] = 1
         img = self.s_transform(img)
         mask = self.t_transform(mask)
         return img, mask
