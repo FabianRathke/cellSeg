@@ -13,6 +13,7 @@ from torchvision import transforms as tsf
 from models import *
 import loadData
 
+
 # ****** LOSS FUNCTION ******
 def soft_dice_loss(inputs, targets):
         num = targets.size(0)
@@ -23,11 +24,12 @@ def soft_dice_loss(inputs, targets):
         score = 1 - score.sum()/num
         return score
 
-
 # ***** LOAD DATA ********
+TRAIN_PATH = './data/train.pth'
+TEST_PATH = './data/test.tph'
 
 splits = loadData.createKSplits(670, 5, random_state=0)
-train_data, val_data = loadData.readFromDisk(splits[0])
+train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 
 s_trans = tsf.Compose([
     tsf.ToPILImage(),
@@ -45,36 +47,93 @@ t_trans = tsf.Compose([
 dataset = loadData.Dataset(train_data,s_trans,t_trans)
 dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=4)
 
+validset = loadData.Dataset(val_data,s_trans,t_trans)
+validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=4)
+
+
 parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
+args.numEpochs = 20
 
-#model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
+# ***** SET MODEL *****
+# model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
 model = UNet2(3,1) # Kaggle notebook implementation
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2,5'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,5'
 model = nn.DataParallel(model).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
 
-for epoch in range(200):
-    running_loss = 0
-    for i, data in enumerate(dataloader, 0):
-    #for x_train, y_train in tqdm(dataloader):
-        inputs, masks = data
-        x_train = torch.autograd.Variable(inputs).cuda()
-        y_train = torch.autograd.Variable(masks).cuda()
-        optimizer.zero_grad()
-        o = model(x_train)
-        loss = soft_dice_loss(o, y_train)
-        loss.backward()
-        optimizer.step()
+
+# ***** TRAIN *****
+
+def evaluate_model(model):
+   running_accuracy = 0
+   for i, data in enumerate(validdataloader, 0):
+      inputs, masks = data
+      x_valid = torch.autograd.Variable(inputs).cuda()
+      y_valid = torch.autograd.Variable(masks).cuda()
+
+      # forward
+      output = model(x_valid)
+      loss = soft_dice_loss(output, y_valid)
+
+      # statistics
+      running_accuracy += loss.data
+
+   return 1.0-running_accuracy/(i+1.0)
+
+
+def train_model(model, num_epochs=200):
+   for epoch in range(num_epochs):
+      running_loss = 0
+      for i, data in enumerate(dataloader, 0):
+         inputs, masks = data
+         x_train = torch.autograd.Variable(inputs).cuda()
+         y_train = torch.autograd.Variable(masks).cuda()
+         optimizer.zero_grad()
+      
+         # forward
+         output = model(x_train)
+         loss = soft_dice_loss(output, y_train)
+
+         # train
+         loss.backward()
+         optimizer.step()
         
-        # statistics
-        running_loss += loss.data
-       	if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batches
+         # statistics
+         running_loss += loss.data
+
+         if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batch
             print('[%d, %5d] loss: %.3f' %
-	      (epoch + 1, i + 1, running_loss / args.iterPrint))
+   	       (epoch + 1, i + 1, running_loss / args.iterPrint))
             running_loss = 0.0
+   
+      acc = evaluate_model(model)
+      
+      print('acc: %.3f' % (acc))
+
+   return model
+
+  
+model = train_model(model,args.numEpochs)
+
+
+# ***** EVALUATION ********
+testset = loadData.TestDataset(TEST_PATH, s_trans)
+testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=4)
+
+# TODO
+# model = model.eval()
+# for data in testdataloader:
+#     data = t.autograd.Variable(data, volatile=True).cuda())
+#     o = model(data)
+#     break
+
+
+
+
+
 
 

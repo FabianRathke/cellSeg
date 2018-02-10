@@ -4,11 +4,6 @@ import numpy as np
 from tqdm import tqdm
 import torch as t
 
-# You can skip this if you have alreadly done it.
-#test = process('../input/stage1_test/', False)
-#t.save(test, TEST_PATH)
-#train_data = process('../input/stage1_train/')
-# t.save(train_data, TRAIN_PATH)
 
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
@@ -64,6 +59,20 @@ class Dataset():
     def __len__(self):
         return len(self.datas)
 
+
+class TestDataset():
+    def __init__(self,path,source_transform):
+        self.datas = t.load(path)
+        self.s_transform = source_transform
+    def __getitem__(self, index):
+        data = self.datas[index]
+        img = data['img'].numpy()
+        img = self.s_transform(img)
+        return img
+    def __len__(self):
+        return len(self.datas)
+
+
 def createKSplits(l, K, random_state=None):
     ''' createKSplits(l, K): returns a list with K entries, each holding a list of indices that constitute one splits. l is the number of data points '''
     arr = np.arange(l)
@@ -86,3 +95,21 @@ def readFromDisk(valIdx, path='/export/home/frathke/workspace/kaggle/cellSegment
     data_val = [data[i] for i in valIdx]
 
     return data_train, data_val
+
+
+def main():
+   ''' Construct train and test data, can be skipped if already done. '''
+   TRAIN_PATH = './data/train.pth'
+   TEST_PATH = './data/test.tph'
+   test = process('../input/stage1_test/', False)
+   t.save(test, TEST_PATH)
+   train_data = process('../input/stage1_train/')
+   t.save(train_data, TRAIN_PATH)
+  
+
+if __name__ == "__main__":
+    main()
+
+
+
+
