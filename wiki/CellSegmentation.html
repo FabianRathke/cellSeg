@@ -134,6 +134,8 @@ Error message and password prompt
 
 <li>$:/state/tab-1749438307</li>
 
+<li>$:/state/tab/moresidebar-401116514</li>
+
 <li>$:/state/tab/sidebar--1835078512</li>
 
 <li>$:/StoryList</li>
@@ -150,7 +152,11 @@ Error message and password prompt
 
 <li>$:/themes/tiddlywiki/vanilla/metrics/tiddlerwidth</li>
 
+<li>Changelog</li>
+
 <li>Notes</li>
+
+<li>TODO</li>
 
 </ul>
 </p>
@@ -8444,10 +8450,13 @@ Error message and password prompt
 <div created="20171207093323566" modified="20180207190002331" title="$:/state/tab-1749438307">
 <pre>$:/core/ui/ControlPanel/Info</pre>
 </div>
-<div created="20171207094039113" modified="20180207185958786" title="$:/state/tab/sidebar--1835078512">
-<pre>$:/core/ui/SideBar/Open</pre>
+<div created="20180210162801383" modified="20180210162801383" title="$:/state/tab/moresidebar-401116514">
+<pre>$:/core/ui/MoreSideBar/All</pre>
 </div>
-<div list="Notes" title="$:/StoryList">
+<div created="20171207094039113" modified="20180210162802975" title="$:/state/tab/sidebar--1835078512">
+<pre>$:/core/ui/SideBar/Recent</pre>
+</div>
+<div list="Changelog TODO Notes" title="$:/StoryList">
 <pre></pre>
 </div>
 <div plugin-type="info" title="$:/temp/info-plugin" type="application/json">
@@ -8463,7 +8472,7 @@ Error message and password prompt
         },
         &quot;$:/info/url/full&quot;: {
             &quot;title&quot;: &quot;$:/info/url/full&quot;,
-            &quot;text&quot;: &quot;file:///home/fabian/Downloads/tiddlywikilocations/CellSegmentation.html&quot;
+            &quot;text&quot;: &quot;file:///home/freddie/GIT/github/cellSeg/wiki/CellSegmentation.html&quot;
         },
         &quot;$:/info/url/host&quot;: {
             &quot;title&quot;: &quot;$:/info/url/host&quot;,
@@ -8483,7 +8492,7 @@ Error message and password prompt
         },
         &quot;$:/info/url/pathname&quot;: {
             &quot;title&quot;: &quot;$:/info/url/pathname&quot;,
-            &quot;text&quot;: &quot;/home/fabian/Downloads/tiddlywikilocations/CellSegmentation.html&quot;
+            &quot;text&quot;: &quot;/home/freddie/GIT/github/cellSeg/wiki/CellSegmentation.html&quot;
         },
         &quot;$:/info/url/search&quot;: {
             &quot;title&quot;: &quot;$:/info/url/search&quot;,
@@ -8491,7 +8500,7 @@ Error message and password prompt
         },
         &quot;$:/info/url/origin&quot;: {
             &quot;title&quot;: &quot;$:/info/url/origin&quot;,
-            &quot;text&quot;: &quot;file://&quot;
+            &quot;text&quot;: &quot;null&quot;
         }
     }
 }</pre>
@@ -8614,6 +8623,14 @@ Error message and password prompt
 <div created="20171207093518065" modified="20171207093518065" title="$:/themes/tiddlywiki/vanilla/metrics/tiddlerwidth">
 <pre>100%</pre>
 </div>
+<div created="20180210163313256" modified="20180210164941425" tags="" title="Changelog">
+<pre>!!! 10.02.2018
+* added train_model() and evaluate_model() to run validation set after each epoch. Set parameters through argument parser. 
+
+
+
+</pre>
+</div>
 <div created="20180207185841299" modified="20180207214841332" tags="" title="Notes">
 <pre>~TiddlyWiki Saver: https://github.com/buggyj/savetiddlers
 
@@ -8625,6 +8642,22 @@ git push -u origin master
 ```
 
 </pre>
+</div>
+<div created="20180210162818601" modified="20180210170215007" tags="" title="TODO">
+<pre>
+* Check training loss (seems to stagnate)
+
+* Update process() to only give single label masks, modify Dataset() accordingly
+
+* Run-length encoding for submission
+
+* Modify network to flexibly set number of layers
+
+* Cross validation for parameter grid search
+
+* Data augmentation 
+
+* Learn interpolation weights</pre>
 </div>
 
 </div>
