@@ -3,7 +3,7 @@ from skimage import io
 import numpy as np
 from tqdm import tqdm
 import torch as t
-
+import ipdb
 
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
@@ -52,10 +52,11 @@ class Dataset():
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
-        mask[mask > 0] = 1
         img = self.s_transform(img)
-        mask = self.t_transform(mask)
-        return img, mask
+        mask = self.t_transform(mask)*255
+        mask_binary = mask.clone()
+        mask_binary[mask > 0] = 1
+        return img, mask_binary, mask
     def __len__(self):
         return len(self.datas)
 

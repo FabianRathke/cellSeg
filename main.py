@@ -6,23 +6,16 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import PIL
 
+# PYTORCH
 import torch
 from torch.utils import data
 from torchvision import transforms as tsf
+import ipdb
 
+# OUR FUNCTIONS
 from models import *
 import loadData
-
-
-# ****** LOSS FUNCTION ******
-def soft_dice_loss(inputs, targets):
-        num = targets.size(0)
-        m1  = inputs.view(num,-1)
-        m2  = targets.view(num,-1)
-        intersection = (m1 * m2)
-        score = 2. * (intersection.sum(1)+1) / (m1.sum(1) + m2.sum(1)+1)
-        score = 1 - score.sum()/num
-        return score
+import util
 
 # ***** LOAD DATA ********
 TRAIN_PATH = './data/train.pth'
@@ -38,6 +31,7 @@ s_trans = tsf.Compose([
     tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
 ]
 )
+A
 t_trans = tsf.Compose([
     tsf.ToPILImage(),
     tsf.Resize((256,256),interpolation=PIL.Image.NEAREST),
@@ -54,21 +48,24 @@ validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=
 parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
+args.iterPlot = 20
 args.numEpochs = 20
 
 # ***** SET MODEL *****
 # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
 model = UNet2(3,1) # Kaggle notebook implementation
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,5'
+#os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,5'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 model = nn.DataParallel(model).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
+lossFunc = util.soft_dice_loss
 
 
 # ***** TRAIN *****
 
-def evaluate_model(model):
+def evaluate_model(model, lossFunc):
    running_accuracy = 0
    for i, data in enumerate(validdataloader, 0):
       inputs, masks = data
@@ -77,7 +74,7 @@ def evaluate_model(model):
 
       # forward
       output = model(x_valid)
-      loss = soft_dice_loss(output, y_valid)
+      loss = lossFunc(output, y_valid)
 
       # statistics
       running_accuracy += loss.data
@@ -85,39 +82,44 @@ def evaluate_model(model):
    return 1.0-running_accuracy/(i+1.0)
 
 
-def train_model(model, num_epochs=200):
-   for epoch in range(num_epochs):
-      running_loss = 0
-      for i, data in enumerate(dataloader, 0):
-         inputs, masks = data
-         x_train = torch.autograd.Variable(inputs).cuda()
-         y_train = torch.autograd.Variable(masks).cuda()
-         optimizer.zero_grad()
-      
-         # forward
-         output = model(x_train)
-         loss = soft_dice_loss(output, y_train)
+def train_model(model, lossFunc, num_epochs=100):
+    for epoch in range(num_epochs):
+        running_loss = 0
+        for i, data in enumerate(dataloader, 0):
+            inputs, masks, masks_multiLabel = data
+            x_train = torch.autograd.Variable(inputs).cuda()
+            y_train = torch.autograd.Variable(masks).cuda()
+            optimizer.zero_grad()
+         
+            # forward
+            output = model(x_train)
+            loss = lossFunc(output, y_train)
 
-         # train
-         loss.backward()
-         optimizer.step()
-        
-         # statistics
-         running_loss += loss.data
+            # train
+            loss.backward()
+            optimizer.step()
+           
+            # statistics
+            running_loss += loss.data
+           
+            if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batch
+                print('[%d, %5d] loss: %.3f' %
+                (epoch + 1, i + 1, running_loss / args.iterPrint))
+                running_loss = 0.0
 
-         if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batch
-            print('[%d, %5d] loss: %.3f' %
-   	       (epoch + 1, i + 1, running_loss / args.iterPrint))
-            running_loss = 0.0
-   
-      acc = evaluate_model(model)
-      
-      print('acc: %.3f' % (acc))
+            # plot some segmented training examples
+            if 1 and i % args.iterPlot == args.iterPlot-1:
+                idx = 0
+                #ipdb.set_trace()
+                util.plotExample(inputs[idx,:], masks[idx,0,:,:], output[idx,0,:,:].data, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), False)
 
-   return model
+        acc = evaluate_model(model, lossFunc)
+        print('acc: %.3f' % (acc))
+
+    return model
 
   
-model = train_model(model,args.numEpochs)
+model = train_model(model, lossFunc, args.numEpochs)
 
 
 # ***** EVALUATION ********
