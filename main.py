@@ -31,7 +31,6 @@ s_trans = tsf.Compose([
     tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
 ]
 )
-A
 t_trans = tsf.Compose([
     tsf.ToPILImage(),
     tsf.Resize((256,256),interpolation=PIL.Image.NEAREST),
@@ -68,7 +67,7 @@ lossFunc = util.soft_dice_loss
 def evaluate_model(model, lossFunc):
    running_accuracy = 0
    for i, data in enumerate(validdataloader, 0):
-      inputs, masks = data
+      inputs, masks, masks_multilabel = data
       x_valid = torch.autograd.Variable(inputs).cuda()
       y_valid = torch.autograd.Variable(masks).cuda()
 
@@ -108,7 +107,7 @@ def train_model(model, lossFunc, num_epochs=100):
                 running_loss = 0.0
 
             # plot some segmented training examples
-            if 1 and i % args.iterPlot == args.iterPlot-1:
+            if 0 and i % args.iterPlot == args.iterPlot-1:
                 idx = 0
                 #ipdb.set_trace()
                 util.plotExample(inputs[idx,:], masks[idx,0,:,:], output[idx,0,:,:].data, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), False)
