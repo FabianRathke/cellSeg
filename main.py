@@ -110,7 +110,13 @@ def train_model(model, lossFunc, num_epochs=100):
             if 0 and i % args.iterPlot == args.iterPlot-1:
                 idx = 0
                 #ipdb.set_trace()
-                util.plotExample(inputs[idx,:], masks[idx,0,:,:], output[idx,0,:,:].data, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), False)
+                score = util.competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
+                util.plotExample(inputs[idx,:], masks[idx,0,:,:], output[idx,0,:,:].data, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:], score), False)
+
+            for j in range(inputs.shape[0]):
+                # evalute competition loss function
+                score = util.competition_loss_func(output[j,0,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+                print(score)
 
         acc = evaluate_model(model, lossFunc)
         print('acc: %.3f' % (acc))
