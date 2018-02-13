@@ -14,7 +14,23 @@ from models import *
 import loadData
 from torchvision import datasets, transforms
 
+from logger_tensorboard.logger import Logger 
+
+
 import ipdb
+
+# ***** LOGGING *****
+
+logger = Logger('./logs')
+
+def to_var(x):
+    if torch.cuda.is_available():
+        x = x.cuda()
+    return Variable(x)
+
+def to_np(x):
+    return x.data.cpu().numpy()
+
 
 # ****** LOSS FUNCTION ******
 def soft_dice_loss(inputs, targets):
@@ -27,31 +43,6 @@ def soft_dice_loss(inputs, targets):
         return score
 
 # ***** LOAD DATA ********
-TRAIN_PATH = './data/train.pth'
-TEST_PATH = './data/test.tph'
-
-#splits = loadData.createKSplits(670, 5, random_state=0)
-#train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
-
-s_trans = tsf.Compose([
-    tsf.ToPILImage(),
-    tsf.Resize((32,32)),
-    tsf.ToTensor(),
-    tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
-]
-)
-t_trans = tsf.Compose([
-    tsf.ToPILImage(),
-    tsf.Resize((32,32),interpolation=PIL.Image.NEAREST),
-    tsf.ToTensor(),]
-)
-
-#dataset = loadData.Dataset(train_data,s_trans,t_trans)
-#dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=4)
-
-#validset = loadData.Dataset(val_data,s_trans,t_trans)
-#validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=4)
-
 
 dataset = datasets.MNIST('../data', train=True, download=True,
                             transform=transforms.Compose([
@@ -63,12 +54,10 @@ dataset = datasets.MNIST('../data', train=True, download=True,
 # Replace the numerical value with mask
 dataset = [( data[0],  (data[0] > 0).type(torch.FloatTensor)) for data in dataset]
 
-dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=4)
-
-
+dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=100)
 
 # Validataion data
-validset= datasets.MNIST('../data', train=False, download=True,
+validset = datasets.MNIST('../data', train=False, download=True,
                             transform=transforms.Compose([
                             transforms.Pad(2),
                             transforms.ToTensor(),
@@ -77,35 +66,12 @@ validset= datasets.MNIST('../data', train=False, download=True,
 
 validset = [( data[0],  (data[0] > 0).type(torch.FloatTensor)) for data in validset]
 
-validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=4)
-
-def visualize_image(data,idx):
-    d = data[idx][0].cpu().permute(1,2,0).numpy()
-    m = data[idx][1].cpu().permute(1,2,0).numpy()
-    if d.shape[-1] == 1:
-        d = np.reshape(d,d.shape[:-1])
-        m = np.reshape(m,m.shape[:-1])
-
-    plt.subplot(1,2,1)
-    plt.imshow(d)
-    plt.title('idx ' + np.str(idx)) 
-    plt.subplot(1,2,2)
-    plt.imshow(m)
-    plt.title('mask')
-
-
-
-# plt.figure(1)
-# visualize_image(dataset,1)
-
-# plt.figure(2)
-# visualize_image(validset,1)
-# plt.show()
+validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=100)
 
 
 parser = argparse.ArgumentParser()
 args = parser.parse_args()
-args.iterPrint = 5
+args.iterPrint = 1
 args.numEpochs = 20
 
 # ***** SET MODEL *****
@@ -138,45 +104,68 @@ def evaluate_model(model):
 
 
 def train_model(model, num_epochs=200):
-   for epoch in range(num_epochs):
-      running_loss = 0
-      for i, data in enumerate(dataloader, 0):
+    for epoch in range(num_epochs):
+        running_loss = 0
+        for i, data in enumerate(dataloader, 0):
 
-         # Choose only very small subset of data, comment for full dataset.
-         if i < 50:
-             inputs, masks = data
-             # _  , m = data
-             
-             # ipdb.set_trace()
-
-
-             x_train = torch.autograd.Variable(inputs).cuda()
-             y_train = torch.autograd.Variable(masks).cuda()
+            # Choose only very small subset of data, comment for full dataset.
+            if i < 50:
+                inputs, masks = data
+                # _  , m = data
+                 
+                # ipdb.set_trace()
 
 
-             optimizer.zero_grad()
+                x_train = torch.autograd.Variable(inputs).cuda()
+                y_train = torch.autograd.Variable(masks).cuda()
+
+
+                optimizer.zero_grad()
+              
+                # forward
+                output = model(x_train)
+                loss = soft_dice_loss(output, y_train)
+
+                # train
+                loss.backward()
+                optimizer.step()
+                
+                # statistics
+                running_loss += loss.data
+
+                if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batch
+                    acc = evaluate_model(model)
+                     
+                    print('[%d, %5d] loss: %.3f, acc %.3f' %
+                        (epoch + 1, i + 1, running_loss / args.iterPrint, acc))
+                    running_loss = 0.0
+
+
+                    # ================= TensorBoard logging ==================#
+                    # (1) Log the scalar values
+                    info = {
+                        'loss': loss.data[0],
+                        'accuracy': acc
+                    }
+
+                    for tag, value in info.items():
+                        logger.scalar_summary(tag, value, i+1)
+
+                    # (2) Log values and gradients of the parameters (histogram)
+                    for tag, value in model.named_parameters():
+                        tag = tag.replace('.', '/')
+                        logger.histo_summary(tag, to_np(value), i+1)
+                        logger.histo_summary(tag+'/grad', to_np(value.grad), i+1)
+
+                    # (3) Log the images
+                    info = {
+                        'images': inputs.view(-1, 32, 32)[:10].cpu().numpy()
+                    }
+
+                    for tag, images in info.items():
+                    	logger.image_summary(tag, images, i+1)
           
-             # forward
-             output = model(x_train)
-             loss = soft_dice_loss(output, y_train)
-
-             # train
-             loss.backward()
-             optimizer.step()
-            
-             # statistics
-             running_loss += loss.data
-
-             if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batch
-                print('[%d, %5d] loss: %.3f' %
-               (epoch + 1, i + 1, running_loss / args.iterPrint))
-                running_loss = 0.0
-   
-      acc = evaluate_model(model)
-      
-      print('acc: %.3f' % (acc))
-
-   return model
+    return model
 
   
 model = train_model(model,args.numEpochs)
