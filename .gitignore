@@ -1,3 +1,5 @@
 data
 *.sw*
 *pycache*
+unet
+/plots

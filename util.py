@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from skimage import measure
+from skimage.transform import resize
 
 # ****** LOSS FUNCTION ******
 def soft_dice_loss(inputs, targets):
@@ -37,7 +38,7 @@ def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False
 def competition_loss_func(inputs,targets):
     ''' https://www.kaggle.com/c/data-science-bowl-2018#evaluation
         evaluates IoU (intersection over union) for various thresholds and calculates
-        TPs, FPs and FNs for all objects (detected and ground truth). The final score
+        TPs, FPs and FNs for all objects (detected vs. ground truth). The final score
         is averaged over all thresholds. '''
 
     thresholds = np.arange(0.5,1,0.05)
@@ -50,6 +51,12 @@ def competition_loss_func(inputs,targets):
     labels_inputs = np.unique(inputs).astype('int32')
     matched_labels = np.zeros((len(labels)-1,2))
     IoU = np.zeros(len(labels)-1)
+    # plot ground truth and predicted labels
+    if 0:
+        plt.subplot(121)
+        plt.imshow(targets)
+        plt.subplot(122)
+        plt.imshow(inputs)
 
     for i in range(1,len(labels)):
         # check for predicted objects which overlaps the current ground truth object
@@ -82,3 +89,21 @@ def competition_loss_func(inputs,targets):
 
     score /= len(thresholds)
     return score
+
+
+
+def rle_encoding(x):
+    ''' From https://www.kaggle.com/keegil/keras-u-net-starter-lb-0-277 '''
+    dots = np.where(x.T.flatten() == 1)[0]
+    run_lengths = []
+    prev = -2
+    for b in dots:
+        if (b>prev+1): run_lengths.extend((b + 1, 0))
+        run_lengths[-1] += 1
+        prev = b
+    return run_lengths
+
+def prob_to_rles(x):
+    lab_img = measure.label(x)
+    for i in range(1, lab_img.max() + 1):
+        yield rle_encoding(lab_img == i)

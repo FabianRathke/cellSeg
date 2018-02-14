@@ -67,9 +67,11 @@ class TestDataset():
         self.s_transform = source_transform
     def __getitem__(self, index):
         data = self.datas[index]
+        name = data['name']
         img = data['img'].numpy()
+        shape = t.IntTensor([img.shape[0], img.shape[1]])
         img = self.s_transform(img)
-        return img
+        return img, shape, name
     def __len__(self):
         return len(self.datas)
 
