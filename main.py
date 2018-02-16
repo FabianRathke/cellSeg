@@ -28,13 +28,17 @@ s_trans = tsf.Compose([
     tsf.ToPILImage(),
     tsf.Resize((256,256)),
     tsf.ToTensor(),
+    # Global mean and std
+    # tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588],
+    #                std = [0.03701544,  0.05455154,  0.03268249])
     tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
 ]
 )
 t_trans = tsf.Compose([
     tsf.ToPILImage(),
     tsf.Resize((256,256),interpolation=PIL.Image.NEAREST),
-    tsf.ToTensor(),]
+    tsf.ToTensor()
+]
 )
 
 dataset = loadData.Dataset(train_data,s_trans,t_trans)
@@ -55,7 +59,7 @@ args.numEpochs = 100
 model = UNet2(3,1) # Kaggle notebook implementation
 
 #os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,5'
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 model = nn.DataParallel(model).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)

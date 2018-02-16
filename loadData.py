@@ -5,6 +5,8 @@ from tqdm import tqdm
 import torch as t
 import ipdb
 
+import pandas as pd
+
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
     files = sorted(list(Path(file_path).iterdir()))
@@ -48,11 +50,22 @@ class Dataset():
 #         self.datas = train_data
         self.s_transform = source_transform
         self.t_transform = target_transform
+
     def __getitem__(self, index):
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
-        img = self.s_transform(img)
+    
+        # Class specific normalization  
+        # df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
+        # classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 
+        # rows, cols, dims = img.shape
+        # imgmean = np.mean(np.reshape(img,(rows*cols,dims)), axis=0) 
+        # c = np.argmin( np.sum((classmean - imgmean)**2, axis=1) )
+        # img = img - classmean[c,:]
+        # img.dtype = np.uint8
+       
+        img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
         mask_binary = mask.clone()
         mask_binary[mask > 0] = 1
@@ -103,7 +116,7 @@ def readFromDisk(valIdx, path='/export/home/frathke/workspace/kaggle/cellSegment
 def main():
    ''' Construct train and test data, can be skipped if already done. '''
    TRAIN_PATH = './data/train.pth'
-   TEST_PATH = './data/test.tph'
+   TEST_PATH = './data/test.pth'
    test = process('../input/stage1_test/', False)
    t.save(test, TEST_PATH)
    train_data = process('../input/stage1_train/')
