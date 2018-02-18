@@ -46,23 +46,24 @@ def process(file_path, has_mask=True):
     return datas
 
 class Dataset():
-    def __init__(self,data,source_transform,target_transform,source_target_transform,mode=None):
+    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False):
         self.datas = data
 #         self.datas = train_data
         self.s_transform = source_transform
         self.t_transform = target_transform
-        self.st_transform = source_target_transform
-        self.mode = mode
+  
+        self.augment = augment
+        if self.augment:
+            self.st_transform = source_target_transform
 
     def __getitem__(self, index):
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
     
-        img = self.st_transform(img)
-        mask = self.st_transform(mask)
-        
-        if self.mode == 'train':
+        if self.augment == True:
+            img = self.st_transform(img)
+            mask = self.st_transform(mask)
             rot  = randint(-20,20)
             img  = img.rotate(rot)
             mask = mask.rotate(rot)

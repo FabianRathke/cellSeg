@@ -23,9 +23,9 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 100 
+args.numEpochs = 1000
 args.learnWeights = True
-args.dataAugm = True
+args.dataAugm = False
 
 
 
@@ -57,14 +57,9 @@ if args.dataAugm:
 		tsf.ToTensor()
 	])
 
-	test_trans = tsf.Compose([
-		tsf.ToPILImage(),
-		tsf.Resize((256,256)),
-		tsf.ToTensor(),
-        normalize
-	])    
-
 else:
+    st_trans = None
+
     s_trans = tsf.Compose([
         tsf.ToPILImage(),
         tsf.Resize((256,256)),
@@ -78,7 +73,16 @@ else:
     ])
 
 
-dataset = loadData.Dataset(train_data,s_trans,t_trans,st_trans,'train')
+test_trans = tsf.Compose([
+    tsf.ToPILImage(),
+    tsf.Resize((256,256)),
+    tsf.ToTensor(),
+    normalize
+])    
+
+
+
+dataset = loadData.Dataset(train_data,s_trans,t_trans,st_trans,args.dataAugm)
 dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=4)
 
 validset = loadData.Dataset(val_data,s_trans,t_trans,st_trans)
