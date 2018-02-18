@@ -52,14 +52,13 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 100 
+args.numEpochs = 3 
 
 # ***** SET MODEL *****
 # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
 model = UNet2(3,1,learn_weights=True) # Kaggle notebook implementation
 
-#os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,5'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0' # 0,1,2,3,4
 model = nn.DataParallel(model).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
@@ -170,5 +169,15 @@ for i,item in enumerate(results):
 sub = pd.DataFrame()
 sub['ImageId'] = new_test_ids
 sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
-sub.to_csv('sub-dsbowl2018-1.csv', index=False)
+# sub.to_csv('sub-dsbowl2018-1.csv', index=False)
+
+
+# save to submission file
+util.save_submission_file(sub,'sub-dsbowl2018-0')
+
+
+
+
+
+
 
