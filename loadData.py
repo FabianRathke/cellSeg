@@ -6,6 +6,7 @@ import torch as t
 import ipdb
 
 import pandas as pd
+from random import *
 
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
@@ -14,9 +15,7 @@ def process(file_path, has_mask=True):
 
     for file in tqdm(files):
         item = {}
-       i
-       imgs = 
-        []
+        imgs = []
         for image in (file/'images').iterdir():
             img = io.imread(image)
             imgs.append(img)
@@ -47,17 +46,27 @@ def process(file_path, has_mask=True):
     return datas
 
 class Dataset():
-    def __init__(self,data,source_transform,target_transform):
+    def __init__(self,data,source_transform,target_transform,source_target_transform,mode=None):
         self.datas = data
 #         self.datas = train_data
         self.s_transform = source_transform
         self.t_transform = target_transform
+        self.st_transform = source_target_transform
+        self.mode = mode
 
     def __getitem__(self, index):
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
     
+        img = self.st_transform(img)
+        mask = self.st_transform(mask)
+        
+        if self.mode == 'train':
+            rot  = randint(-20,20)
+            img  = img.rotate(rot)
+            mask = mask.rotate(rot)
+
         # Class specific normalization  
         # df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
         # classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 

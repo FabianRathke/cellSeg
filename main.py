@@ -17,6 +17,18 @@ from models import *
 import loadData
 import util
 
+# ***** SET PARAMETERS *****
+
+parser = argparse.ArgumentParser()
+args = parser.parse_args()
+args.iterPrint = 5
+args.iterPlot = 20
+args.numEpochs = 100 
+args.learnWeights = True
+args.dataAugm = True
+
+
+
 # ***** LOAD DATA ********
 TRAIN_PATH = './data/train.pth'
 TEST_PATH = './data/test.pth'
@@ -24,41 +36,61 @@ TEST_PATH = './data/test.pth'
 splits = loadData.createKSplits(670, 5, random_state=0)
 train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 
-s_trans = tsf.Compose([
-    tsf.ToPILImage(),
-    tsf.Resize((256,256)),
-    tsf.ToTensor(),
-    # Global mean and std
-    # tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588],
-    #                std = [0.03701544,  0.05455154,  0.03268249])
-    tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
-]
-)
-t_trans = tsf.Compose([
-    tsf.ToPILImage(),
-    tsf.Resize((256,256),interpolation=PIL.Image.NEAREST),
-    tsf.ToTensor()
-]
-)
 
-dataset = loadData.Dataset(train_data,s_trans,t_trans)
+normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
+# normalize = tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588], std = [0.03701544,  0.05455154,  0.03268249])
+
+if args.dataAugm:
+	st_trans = tsf.Compose([
+		tsf.ToPILImage(),
+		tsf.Resize((382,382)) # 382
+	])
+
+	s_trans = tsf.Compose([
+		tsf.CenterCrop(256),
+		tsf.ToTensor(),
+        normalize,
+	])
+
+	t_trans = tsf.Compose([
+		tsf.CenterCrop(256),
+		tsf.ToTensor()
+	])
+
+	test_trans = tsf.Compose([
+		tsf.ToPILImage(),
+		tsf.Resize((256,256)),
+		tsf.ToTensor(),
+        normalize
+	])    
+
+else:
+    s_trans = tsf.Compose([
+        tsf.ToPILImage(),
+        tsf.Resize((256,256)),
+        tsf.ToTensor(),
+        normalize,
+    ])
+    t_trans = tsf.Compose([
+        tsf.ToPILImage(),
+        tsf.Resize((256,256),interpolation=PIL.Image.NEAREST),
+        tsf.ToTensor()
+    ])
+
+
+dataset = loadData.Dataset(train_data,s_trans,t_trans,st_trans,'train')
 dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=4)
 
-validset = loadData.Dataset(val_data,s_trans,t_trans)
+validset = loadData.Dataset(val_data,s_trans,t_trans,st_trans)
 validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=4)
 
 
-parser = argparse.ArgumentParser()
-args = parser.parse_args()
-args.iterPrint = 5
-args.iterPlot = 20
-args.numEpochs = 3 
 
 # ***** SET MODEL *****
 # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-model = UNet2(3,1,learn_weights=True) # Kaggle notebook implementation
+model = UNet2(3,1,learn_weights=args.learnWeights) # Kaggle notebook implementation
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,3' # 0,1,2,3,4
 model = nn.DataParallel(model).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
@@ -136,7 +168,7 @@ model = train_model(model, lossFunc, args.numEpochs)
 #util.plot_results_for_images(model,dataloader)
 
 # ***** EVALUATION ********
-testset = loadData.TestDataset(TEST_PATH, s_trans)
+testset = loadData.TestDataset(TEST_PATH, test_trans)
 testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 
 # make predictions for all test samples
