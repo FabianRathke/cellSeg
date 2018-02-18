@@ -14,7 +14,9 @@ def process(file_path, has_mask=True):
 
     for file in tqdm(files):
         item = {}
-        imgs = []
+       i
+       imgs = 
+        []
         for image in (file/'images').iterdir():
             img = io.imread(image)
             imgs.append(img)
