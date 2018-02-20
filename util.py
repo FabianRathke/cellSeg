@@ -73,7 +73,7 @@ def competition_loss_func(inputs, targets = None):
         # multi-labels from binary input
         inputs =  measure.label(inputs)
 
-    if targets == None:
+    if targets is None:
         return inputs
 
     # number of labels in ground truth

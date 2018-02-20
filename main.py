@@ -119,7 +119,8 @@ def evaluate_model(model, lossFunc):
 
         for j in range(inputs.shape[0]):
             # evalute competition loss function
-            running_score += util.competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+            score, labels = util.competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+            running_score += score
 
     return (1.0-running_accuracy/(i+1.0)), running_score/len(validdataloader.dataset)
 
