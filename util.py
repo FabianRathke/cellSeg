@@ -10,9 +10,24 @@ def soft_dice_loss(inputs, targets):
     m1  = inputs.view(num,-1)
     m2  = targets.view(num,-1)
     intersection = (m1 * m2)
-    score = 2. * (intersection.sum(1)+1) / (m1.sum(1) + m2.sum(1)+1)
+    score = 2. * (intersection.sum(1)+10**-10) / (m1.sum(1) + m2.sum(1)+10**-10)
     score = 1 - score.sum()/num
     return score
+
+
+def soft_dice_loss2(inputs, targets):
+    ''' Loss function from from UnitBox:
+        https://arxiv.org/pdf/1608.01471.pdf '''
+    num = targets.size(0)
+    m1  = inputs.view(num,-1)
+    m2  = targets.view(num,-1)
+    intersection = (m1 * m2)
+    score = 2. * (intersection.sum(1)+1) / (m1.sum(1) + m2.sum(1) - intersection.sum(1) + 1)
+    score = - torch.log( score.sum() )
+    return score
+
+
+
 
 
 def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False):
@@ -20,12 +35,14 @@ def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False
     if interactive:
         plt.ion()
     plt.figure(figsize=(15, 6))
-    plt.subplot(131)
+    plt.subplot(141)
     plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5)
-    plt.subplot(132)
+    plt.subplot(142)
     plt.imshow(mask)
-    plt.subplot(133)
+    plt.subplot(143)
     plt.imshow(pred)
+    plt.subplot(144)
+    plt.imshow(pred > 0.9)
     plt.suptitle("Epoch {} and batch {}: Loss = {:.2f}, CompEval = {:.2f}".format(epoch, batch, loss, lossComp))
     if interactive:
         plt.pause(0.05)
@@ -85,7 +102,7 @@ def competition_loss_func(inputs,targets):
         TP = len(matched_labels[IoU > t, 1])
         FP = len(labels_inputs) - 1 - TP
         FN = len(labels) - 1 - TP
-        score += TP/(TP + FP + FN)
+        score += TP/(TP + FP + FN + 10**-10)
 
     score /= len(thresholds)
     return score
@@ -107,3 +124,20 @@ def prob_to_rles(x):
     lab_img = measure.label(x)
     for i in range(1, lab_img.max() + 1):
         yield rle_encoding(lab_img == i)
+
+
+
+
+def save_submission_file(sub,filename):
+    ''' Save submission file. Follow the name convention "name-0". 
+        If the file exists, then "name-1" etc. is the new filename. '''
+    
+    import os.path 
+    while os.path.exists(filename+'.csv'):
+        namesplit = filename.split("-")
+        namesplit[-1] =  str( int(namesplit[-1])+1 )
+        filename = '-'.join(namesplit) 
+
+    sub.to_csv(filename+'.csv', index=False)
+
+

@@ -8458,7 +8458,7 @@ Error message and password prompt
 <div created="20171207094039113" modified="20180210162802975" title="$:/state/tab/sidebar--1835078512">
 <pre>$:/core/ui/SideBar/Recent</pre>
 </div>
-<div list="Results GettingStarted" title="$:/StoryList">
+<div list="TODO Results Changelog GettingStarted" title="$:/StoryList">
 <pre></pre>
 </div>
 <div plugin-type="info" title="$:/temp/info-plugin" type="application/json">
@@ -8474,7 +8474,7 @@ Error message and password prompt
         },
         &quot;$:/info/url/full&quot;: {
             &quot;title&quot;: &quot;$:/info/url/full&quot;,
-            &quot;text&quot;: &quot;file:///run/user/1000/gvfs/sftp:host=hcigpu04.iwr.uni-heidelberg.de,user=frathke/export/home/frathke/workspace/kaggle/cellSegmentation/wiki/CellSegmentation.html&quot;
+            &quot;text&quot;: &quot;file:///run/user/1000/gvfs/sftp:host=hcigpu01,user=frathke/net/hciserver03/storage/frathke/workspace/kaggle/cellSegmentation/wiki/CellSegmentation.html&quot;
         },
         &quot;$:/info/url/host&quot;: {
             &quot;title&quot;: &quot;$:/info/url/host&quot;,
@@ -8494,7 +8494,7 @@ Error message and password prompt
         },
         &quot;$:/info/url/pathname&quot;: {
             &quot;title&quot;: &quot;$:/info/url/pathname&quot;,
-            &quot;text&quot;: &quot;/run/user/1000/gvfs/sftp:host=hcigpu04.iwr.uni-heidelberg.de,user=frathke/export/home/frathke/workspace/kaggle/cellSegmentation/wiki/CellSegmentation.html&quot;
+            &quot;text&quot;: &quot;/run/user/1000/gvfs/sftp:host=hcigpu01,user=frathke/net/hciserver03/storage/frathke/workspace/kaggle/cellSegmentation/wiki/CellSegmentation.html&quot;
         },
         &quot;$:/info/url/search&quot;: {
             &quot;title&quot;: &quot;$:/info/url/search&quot;,
@@ -8625,8 +8625,13 @@ Error message and password prompt
 <div created="20171207093518065" modified="20171207093518065" title="$:/themes/tiddlywiki/vanilla/metrics/tiddlerwidth">
 <pre>100%</pre>
 </div>
-<div created="20180210163313256" modified="20180211161404336" tags="" title="Changelog">
-<pre>!!! 11.02.2018
+<div created="20180210163313256" modified="20180218171011700" tags="" title="Changelog">
+<pre>!!! 18.02.2018
+* Added function to ``util.py`` to increment filename for result submission preventing overwrites.
+* Added basic data augmentation (rotation)
+* Added learnable weights for upsampling
+
+!!! 11.02.2018
 * Fixed bugs in Dataset() --&gt; Now the model behaves reasonable during training
 * Implemented a plotting function plotExample() in ``util.py``
 
@@ -8666,24 +8671,26 @@ First submission:
  * Final validation loss &lt; 0.1 dice coefficient and ~ 0.45 self-written score function
 </pre>
 </div>
-<div created="20180210162818601" modified="20180212162210467" tags="" title="TODO">
+<div created="20180210162818601" modified="20180220144248160" tags="" title="TODO">
 <pre>* Function for graphical visualizing of training error
 
 * ~~Check training loss (seems to stagnate~~) [DONE]
 
 * update loss function to compare error to each cell nuclei
 
+* Incorporate tensorboard from ``main_MNIST.py`` for easy graphical visualizing of training progress
+* Check data augmentation which now seems to only hurt submission result.
+* Update loss function to compare error to each cell nuclei
 * Update process() to only give single label masks, modify Dataset() accordingly
-
-* Run-length encoding for submission
-
 * Modify network to flexibly set number of layers
-
 * Cross validation for parameter grid search
 
-* Data augmentation 
+* ~~Learn interpolation weights~~
+* ~~Check training loss (seems to stagnate~~) [DONE]
+* ~~Run-length encoding for submission~~
 
-* Learn interpolation weights</pre>
+
+</pre>
 </div>
 
 </div>

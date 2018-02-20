@@ -3,6 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 import torch as t
 
+import ipdb
+
 class double_conv(nn.Module):
     '''(conv => BN => ReLU) * 2'''
     def __init__(self, in_ch, out_ch):
@@ -45,15 +47,13 @@ class down(nn.Module):
 
 
 class up(nn.Module):
-    def __init__(self, in_ch, out_ch, bilinear=True):
+    def __init__(self, in_ch, out_ch, learn_weights=False):
         super(up, self).__init__()
 
-        #  would be a nice idea if the upsampling could be learned too,
-        #  but my machine do not have enough memory to handle all those weights
-        if bilinear:
-            self.up = nn.Upsample(scale_factor=2)
+        if learn_weights:
+            self.up = nn.ConvTranspose2d(int(in_ch/2), out_ch*2, 2, stride=2)
         else:
-            self.up = nn.ConvTranspose2d(in_ch, out_ch, 2, stride=2)
+            self.up = nn.Upsample(scale_factor=2) # bilinear weights
 
         self.conv = double_conv(in_ch, out_ch)
 
@@ -79,18 +79,23 @@ class outconv(nn.Module):
 
 
 class UNet2(nn.Module):
-    def __init__(self, n_channels, n_classes):
+    def __init__(self, n_channels, n_classes, learn_weights=False):
         super(UNet2, self).__init__()
         self.inc = inconv(n_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
         self.down3 = down(256, 512)
         self.down4 = down(512, 512)
-        self.up1 = up(1024, 256)
-        self.up2 = up(512, 128)
-        self.up3 = up(256, 64)
-        self.up4 = up(128, 64)
-        self.outc = outconv(64, n_classes)
+        self.up1 = up(1024, 256, learn_weights)
+        self.up2 = up(512, 128, learn_weights)
+        self.up3 = up(256, 64, learn_weights)
+
+        out_ch = 64
+        if learn_weights:
+            out_ch = 32
+
+        self.up4 = up(128, out_ch, learn_weights)       
+        self.outc = outconv(out_ch, n_classes)
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -98,10 +103,14 @@ class UNet2(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x = self.up1(x5, x4)
+        x = self.up1(x5,x4)
         x = self.up2(x, x3)
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         x = self.outc(x)
         x = t.nn.functional.sigmoid(x)
         return x
+
+
+
+
