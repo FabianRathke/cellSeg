@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import PIL
+from skimage.transform import resize
 
 # PYTORCH
 import torch
@@ -23,9 +24,9 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 1000
+args.numEpochs = 100
 args.learnWeights = True
-args.dataAugm = True
+args.dataAugm = False
 
 
 # ***** LOAD DATA ********
@@ -90,12 +91,12 @@ validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_s
 
 # ***** SET MODEL *****
 # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-model = UNet2(3,1,learn_weights=args.learnWeights) # Kaggle notebook implementation
+model = UNet2(3,2,learn_weights=args.learnWeights) # Kaggle notebook implementation
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '2,3' # 0,1,2,3,4
 model = nn.DataParallel(model).cuda()
 
-optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
+optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
 lossFunc = util.soft_dice_loss
 
 
@@ -118,7 +119,7 @@ def evaluate_model(model, lossFunc):
 
         for j in range(inputs.shape[0]):
             # evalute competition loss function
-            running_score += util.competition_loss_func(output[j,0,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+            running_score += util.competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
 
     return (1.0-running_accuracy/(i+1.0)), running_score/len(validdataloader.dataset)
 
@@ -167,6 +168,7 @@ def train_model(model, lossFunc, num_epochs=100):
   
 model = train_model(model, lossFunc, args.numEpochs)
 
+
 #util.plot_results_for_images(model,dataloader)
 
 # ***** EVALUATION ********
@@ -177,7 +179,8 @@ testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 model = model.eval()
 results = []
 test_ids = []
-for data in testdataloader:
+for i, data in enumerate(testdataloader):
+    print(i)
     inputs, shape, name = data
     x_test = t.autograd.Variable(inputs, volatile=True).cuda()
     output = model(x_test)
@@ -186,25 +189,25 @@ for data in testdataloader:
     #idx = 0 
     #util.plotExample(inputs[idx,:], output[idx,0,:,:].data, output[idx,0,:,:].data, 0, 0, 0, 0, True)
 
-from skimage.transform import resize
-
 # upsample and encode
 new_test_ids = []
 rles = []
 for i,item in enumerate(results):
+    print(i)
     output_t = (item[0] > 0.5).data.numpy().astype(np.uint8)
     # upsample
-    preds_test_upsampled = resize(output_t, (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
-    
-    rle = list(util.prob_to_rles(preds_test_upsampled))
+    preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
+    preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
+
+    labels = util.competition_loss_func(preds_test_upsampled)
+
+    rle = list(util.prob_to_rles(labels))
     rles.extend(rle)
     new_test_ids.extend([test_ids[i]] * len(rle))
 
 sub = pd.DataFrame()
 sub['ImageId'] = new_test_ids
 sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
-# sub.to_csv('sub-dsbowl2018-1.csv', index=False)
-
 
 # save to submission file
 util.save_submission_file(sub,'sub-dsbowl2018-0')

@@ -5,6 +5,8 @@ from tqdm import tqdm
 import torch as t
 import ipdb
 
+from skimage.filters import sobel
+
 import pandas as pd
 from random import *
 import PIL 
@@ -78,12 +80,26 @@ class Dataset():
         # img = img - classmean[c,:]
         # img.dtype = np.uint8
        
-        ipdb.set_trace()
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
+        # if there is at least one label
+        if mask.sum() > 0:
+            # edge mask
+            edge_mask = t.from_numpy(sobel(mask[0,:,:]/mask.max()).astype('float32')).unsqueeze(0) # sobel filter
+            edge_mask[edge_mask > 0] = 1 # binarize
+        else:
+            edge_mask = mask.clone()
+
+        # binary body mask
         mask_binary = mask.clone()
         mask_binary[mask > 0] = 1
-        return img, mask_binary, mask
+        # substract edges from mask
+        #mask_binary = mask_binary - edge_mask
+        #mask_binary[mask_binary < 0] = 0
+        # stack resulting masks
+        mask_stacked = t.cat((mask_binary,edge_mask))
+        #mask_stacked = edge_mask
+        return img, mask_stacked, mask
     def __len__(self):
         return len(self.datas)
 

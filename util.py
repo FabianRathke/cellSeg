@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import torch
 from skimage import measure
 from skimage.transform import resize
+from scipy import ndimage
+import skimage.morphology as morph
 
 # ****** LOSS FUNCTION ******
 def soft_dice_loss(inputs, targets):
@@ -30,38 +32,49 @@ def soft_dice_loss2(inputs, targets):
 
 
 
-def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False):
+def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False, folder = 'plots'):
     ''' Plots ground truth and prediction for a cell image '''
     if interactive:
         plt.ion()
     plt.figure(figsize=(15, 6))
-    plt.subplot(141)
+    plt.subplot(131)
     plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5)
-    plt.subplot(142)
+    plt.subplot(132)
     plt.imshow(mask)
-    plt.subplot(143)
+    plt.subplot(1433)
     plt.imshow(pred)
-    plt.subplot(144)
-    plt.imshow(pred > 0.9)
     plt.suptitle("Epoch {} and batch {}: Loss = {:.2f}, CompEval = {:.2f}".format(epoch, batch, loss, lossComp))
     if interactive:
         plt.pause(0.05)
         plt.draw()
     else:
-        plt.savefig("plots/epoch_{}_batch_{}.png".format(epoch,batch))
+        plt.savefig("{}/epoch_{}_batch_{}.png".format(folder,epoch,batch))
         plt.close()
 
 
-def competition_loss_func(inputs,targets):
+def competition_loss_func(inputs, targets = None):
     ''' https://www.kaggle.com/c/data-science-bowl-2018#evaluation
         evaluates IoU (intersection over union) for various thresholds and calculates
         TPs, FPs and FNs for all objects (detected vs. ground truth). The final score
         is averaged over all thresholds. '''
 
     thresholds = np.arange(0.5,1,0.05)
-   
-    # multi-labels from binary input
-    inputs =  measure.label(inputs)
+  
+    if inputs.shape[0] > 1:
+        diff = inputs[0,:]-inputs[1,:]
+        diff[diff < 0.9] = 0
+        diff[diff > 0.9] = 1
+	#plt.subplot(221); plt.imshow(inputs[0,:]); plt.subplot(222); plt.imshow(inputs[1,:]); plt.subplot(223); plt.imshow(diff); plt.subplot(224); plt.imshow(targets); plt.show()
+        labels = measure.label(diff)
+        bodies = inputs[0,:]
+        bodies[bodies > 0.9] = 1 # threshold
+        inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
+    else:
+        # multi-labels from binary input
+        inputs =  measure.label(inputs)
+
+    if targets == None:
+        return inputs
 
     # number of labels in ground truth
     labels = np.unique(targets).astype('int32')
@@ -105,8 +118,18 @@ def competition_loss_func(inputs,targets):
         score += TP/(TP + FP + FN + 10**-10)
 
     score /= len(thresholds)
-    return score
+    return score, inputs
 
+def plot_all_results(model, dataloader, folder = 'gallery'):
+    ''' predicts and plots all scans in dataloader using model '''
+    for data in dataloader:
+        inputs, masks, masks_multiLabel = data
+        x_train = torch.autograd.Variable(inputs).cuda()
+        output = model(x_train)
+
+        for idx in range(inputs.shape[0]):
+            score, labels_pred = util.competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
+            plotExample(inputs[idx,:], masks[idx,:], labels_pred, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), score, False, folder)
 
 
 def rle_encoding(x):
@@ -120,10 +143,9 @@ def rle_encoding(x):
         prev = b
     return run_lengths
 
-def prob_to_rles(x):
-    lab_img = measure.label(x)
-    for i in range(1, lab_img.max() + 1):
-        yield rle_encoding(lab_img == i)
+def prob_to_rles(labels):
+    for i in range(1, labels.max() + 1):
+        yield rle_encoding(labels == i)
 
 
 
