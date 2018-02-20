@@ -25,8 +25,7 @@ args.iterPrint = 5
 args.iterPlot = 20
 args.numEpochs = 1000
 args.learnWeights = True
-args.dataAugm = False
-
+args.dataAugm = True
 
 
 # ***** LOAD DATA ********
@@ -41,22 +40,21 @@ normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
 # normalize = tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588], std = [0.03701544,  0.05455154,  0.03268249])
 
 if args.dataAugm:
-	st_trans = tsf.Compose([
-		tsf.ToPILImage(),
-		tsf.Resize((382,382)) # 382
-	])
+    st_trans = tsf.Compose([
+        tsf.ToPILImage(),
+	tsf.Resize((382,382)) # 382
+    ])
 
-	s_trans = tsf.Compose([
-		tsf.CenterCrop(256),
-		tsf.ToTensor(),
+    s_trans = tsf.Compose([
+        tsf.CenterCrop(256),
+	tsf.ToTensor(),
         normalize,
-	])
+    ])
 
-	t_trans = tsf.Compose([
-		tsf.CenterCrop(256),
-		tsf.ToTensor()
-	])
-
+    t_trans = tsf.Compose([
+        tsf.CenterCrop(256),
+	tsf.ToTensor()
+    ])
 else:
     st_trans = None
 
@@ -82,11 +80,11 @@ test_trans = tsf.Compose([
 
 
 
-dataset = loadData.Dataset(train_data,s_trans,t_trans,st_trans,args.dataAugm)
-dataloader = torch.utils.data.DataLoader(dataset,num_workers=2,batch_size=4)
+dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm)
+dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
-validset = loadData.Dataset(val_data,s_trans,t_trans,st_trans)
-validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=4)
+validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm)
+validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
 
 
 
@@ -94,7 +92,7 @@ validdataloader = torch.utils.data.DataLoader(validset,num_workers=2,batch_size=
 # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
 model = UNet2(3,1,learn_weights=args.learnWeights) # Kaggle notebook implementation
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,3' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '2,3' # 0,1,2,3,4
 model = nn.DataParallel(model).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
@@ -210,10 +208,3 @@ sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in 
 
 # save to submission file
 util.save_submission_file(sub,'sub-dsbowl2018-0')
-
-
-
-
-
-
-

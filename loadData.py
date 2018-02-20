@@ -7,6 +7,7 @@ import ipdb
 
 import pandas as pd
 from random import *
+import PIL 
 
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
@@ -66,7 +67,7 @@ class Dataset():
             mask = self.st_transform(mask)
             rot  = randint(-20,20)
             img  = img.rotate(rot)
-            mask = mask.rotate(rot)
+            mask = mask.rotate(rot, resample=PIL.Image.NEAREST)
 
         # Class specific normalization  
         # df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
@@ -77,6 +78,7 @@ class Dataset():
         # img = img - classmean[c,:]
         # img.dtype = np.uint8
        
+        ipdb.set_trace()
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
         mask_binary = mask.clone()
