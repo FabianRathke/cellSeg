@@ -18,6 +18,7 @@ from models import *
 import loadData
 import util
 
+
 # ***** SET PARAMETERS *****
 
 parser = argparse.ArgumentParser()
