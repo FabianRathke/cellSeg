@@ -5,6 +5,11 @@ from tqdm import tqdm
 import torch as t
 import ipdb
 
+
+from torchvision import transforms
+
+import matplotlib.pyplot as plt
+
 from skimage.filters import sobel
 
 import pandas as pd
@@ -48,6 +53,11 @@ def process(file_path, has_mask=True):
         datas.append(item)
     return datas
 
+
+def crop_nparray(img, xy):
+    return img[xy[1]:xy[3], xy[0]:xy[2], :]
+
+
 class Dataset():
     def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False):
         self.datas = data
@@ -63,13 +73,56 @@ class Dataset():
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
-    
+
+        
         if self.augment == True:
-            img = self.st_transform(img)
-            mask = self.st_transform(mask)
-            rot  = randint(-20,20)
-            img  = img.rotate(rot)
-            mask = mask.rotate(rot, resample=PIL.Image.NEAREST)
+
+            if np.all(np.asarray(img.shape) > 256):
+                
+                print(mask.shape)
+                plt.figure(1)
+                plt.subplot(2,2,1)
+                plt.imshow(img)
+                plt.subplot(2,2,3)
+                plt.imshow(mask.squeeze(axis=2))               
+
+                # randomly crop data and mask
+                xcoord = randint(0,img.shape[0] - 256 + 1)
+                ycoord = randint(0,img.shape[1] - 256 + 1)
+                mask = crop_nparray(mask,(xcoord, ycoord, xcoord+256, ycoord+256))
+                img  = crop_nparray(img, (xcoord, ycoord, xcoord+256, ycoord+256))
+
+
+                # mirror
+
+                # transposei
+
+                # rotate
+
+
+            else:
+                toPIL = transforms.ToPILImage()
+                img = toPIL(img)
+                mask = toPIL(mask)
+
+                img = self.st_transform(img)
+                mask = self.st_transform(mask)
+         
+
+            
+        #plt.subplot(2,2,2)
+        #plt.imshow(img)
+        #plt.subplot(2,2,4)
+        #plt.imshow(mask.squeeze(axis=2))
+        #print(mask.shape)
+        #plt.show()
+        # else:
+        # reshape to 256x256
+
+            # Rotation
+            # rot  = randint(-20,20)
+            # img  = img.rotate(rot)
+            # mask = mask.rotate(rot, resample=PIL.Image.NEAREST)
 
         # Class specific normalization  
         # df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
