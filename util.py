@@ -5,6 +5,13 @@ from skimage import measure
 from skimage.transform import resize
 from scipy import ndimage
 import skimage.morphology as morph
+from skimage.morphology import watershed
+from skimage.feature import peak_local_max
+import ipdb
+import os.path
+from skimage.measure import regionprops
+
+from models import *
 
 # ****** LOSS FUNCTION ******
 def soft_dice_loss(inputs, targets):
@@ -41,7 +48,7 @@ def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False
     plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5)
     plt.subplot(132)
     plt.imshow(mask)
-    plt.subplot(1433)
+    plt.subplot(133)
     plt.imshow(pred)
     plt.suptitle("Epoch {} and batch {}: Loss = {:.2f}, CompEval = {:.2f}".format(epoch, batch, loss, lossComp))
     if interactive:
@@ -58,6 +65,8 @@ def competition_loss_func(inputs, targets = None):
         TPs, FPs and FNs for all objects (detected vs. ground truth). The final score
         is averaged over all thresholds. '''
 
+    # ipdb.set_trace()
+    data_inputs = inputs.copy()
     thresholds = np.arange(0.5,1,0.05)
   
     if inputs.shape[0] > 1:
@@ -69,6 +78,51 @@ def competition_loss_func(inputs, targets = None):
         bodies = inputs[0,:]
         bodies[bodies > 0.9] = 1 # threshold
         inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
+
+
+        unique, counts = np.unique(inputs, return_counts=True)
+        radi = np.sqrt(np.median(counts[1:-1])/np.pi)
+        # get average size of nuclei
+        
+        current_label = 1
+        corrected = np.zeros_like(inputs)
+        for k in unique[1:-1]:
+            label_k = (inputs == k).astype(int)
+            rprop = regionprops(label_k)
+            n_label_k = np.sum(label_k)
+            if n_label_k > 30:
+                n_hull    = rprop[0].convex_area - n_label_k
+                if n_hull/n_label_k > 0.2:
+                    # ipdb.set_trace()
+                    # radi = np.sqrt((n_label_k)/np.pi)
+                    fprint = np.int(np.maximum(2*np.floor(radi/2)+1,3))
+                    distance = ndimage.distance_transform_edt(label_k)
+                    diff_connectivity = measure.label(label_k)
+                    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((fprint,fprint)),
+                                        num_peaks_per_label=2, labels=diff_connectivity, )
+                    markers = ndimage.label(local_maxi)[0]
+                    label_k = morph.watershed(-distance, markers, mask=label_k)
+
+                unique, counts = np.unique(label_k, return_counts=True)
+                # print(unique)
+                for u in unique[np.arange(len(unique))!=0]:
+                    # corrected = corrected + (label_k == u).astype(int)*current_label
+                    corrected[label_k == u] = current_label
+                    #print(current_label)
+                    current_label += 1
+
+        # print(current_label)
+        inputs = corrected
+
+        #plt.figure(20),
+        #plt.subplot(1,2,1)
+        #plt.imshow(inputs), 
+
+        #plt.subplot(1,2,2)
+        #plt.imshow(corrected)
+        #plt.show()
+        #ipdb.set_trace()
+
     else:
         # multi-labels from binary input
         inputs =  measure.label(inputs)
@@ -123,12 +177,15 @@ def competition_loss_func(inputs, targets = None):
 def plot_all_results(model, dataloader, folder = 'gallery'):
     ''' predicts and plots all scans in dataloader using model '''
     for data in dataloader:
+        
+        ipdb.set_trace()
+
         inputs, masks, masks_multiLabel = data
         x_train = torch.autograd.Variable(inputs).cuda()
         output = model(x_train)
 
         for idx in range(inputs.shape[0]):
-            score, labels_pred = util.competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
+            score, labels_pred = competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
             plotExample(inputs[idx,:], masks[idx,:], labels_pred, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), score, False, folder)
 
 
@@ -152,9 +209,8 @@ def prob_to_rles(labels):
 
 def save_submission_file(sub,filename):
     ''' Save submission file. Follow the name convention "name-0". 
-        If the file exists, then "name-1" etc. is the new filename. '''
-    
-    import os.path 
+        If the file exists, then "name-1" etc. is the new filename. ''' 
+     
     while os.path.exists(filename+'.csv'):
         namesplit = filename.split("-")
         namesplit[-1] =  str( int(namesplit[-1])+1 )
@@ -162,4 +218,21 @@ def save_submission_file(sub,filename):
 
     sub.to_csv(filename+'.csv', index=False)
 
+def save_model(model, filename):
+    ''' Save model file. Follow the name convention "name-0". 
+        If the file exists, then "name-1" etc. is the new filename. '''
+    
+    while os.path.exists(filename+'.pt'):
+        namesplit = filename.split("-")
+        namesplit[-1] =  str( int(namesplit[-1])+1 )
+        filename = '-'.join(namesplit) 
+        
+    torch.save(model, filename+'.pt')
 
+
+def load_model(PATH):
+    ''' Load saved model. '''
+    
+    return torch.load(PATH)
+
+    
