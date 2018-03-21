@@ -195,7 +195,7 @@ new_test_ids = []
 rles = []
 for i,item in enumerate(results):
     print(i)
-    output_t = (item[0] > 0.5).data.numpy().astype(np.uint8)
+    output_t = (item[0] > 0.5).data.numpy().astype(np.int8)
     # upsample
     preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
     preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
