@@ -15,6 +15,7 @@ from models import *
 
 # ****** LOSS FUNCTION ******
 def soft_dice_loss(inputs, targets):
+    # ipdb.set_trace()
     num = targets.size(0)
     m1  = inputs.view(num,-1)
     m2  = targets.view(num,-1)
@@ -24,15 +25,25 @@ def soft_dice_loss(inputs, targets):
     return score
 
 
-def soft_dice_loss2(inputs, targets):
-    ''' Loss function from from UnitBox:
-        https://arxiv.org/pdf/1608.01471.pdf '''
-    num = targets.size(0)
-    m1  = inputs.view(num,-1)
-    m2  = targets.view(num,-1)
-    intersection = (m1 * m2)
-    score = 2. * (intersection.sum(1)+1) / (m1.sum(1) + m2.sum(1) - intersection.sum(1) + 1)
-    score = - torch.log( score.sum() )
+def soft_dice_weighted_loss(inputs, targets):
+    # ipdb.set_trace()
+    num = targets.size(1)
+    
+    score_total = 0
+    for i in range(targets.size(0)):
+        class_sum = targets[i,:,:,:].sum(1).sum(1)
+        class_w = 1-class_sum/(class_sum.sum()+1)
+        class_w = class_w/(class_w.sum()+1)
+
+        m1 = inputs[i,:,:,:].view(num,-1)
+        m2 = targets[i,:,:,:].view(num,-1)
+        intersection = (m1 * m2)
+
+        score = 2. * (intersection.sum(1)+10**-10) / (m1.sum(1) + m2.sum(1)+10**-10)
+
+        score_total += (score*class_w).sum()
+     
+    score = 1 - score_total/targets.size(0)
     return score
 
 

@@ -25,7 +25,7 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 20 
+args.numEpochs = 100 
 args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
@@ -81,7 +81,7 @@ if args.dataAugm:
     t_trans = tsf.Compose([
         # tsf.CenterCrop(256),
         tsf.ToPILImage(),
-        tsf.Resize((args.imgWidth,args.imgWidth)), # 382
+        tsf.Resize((args.imgWidth,args.imgWidth),interpolation=PIL.Image.NEAREST), # 382
         tsf.ToTensor()
     ])
 else:
@@ -115,16 +115,18 @@ dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 
 validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
 validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
 
-
+# ipdb.set_trace()
 
 # ***** SET MODEL *****
 # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-model = UNet2(3,2,learn_weights=args.learnWeights) # Kaggle notebook implementation
+model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementation
 
 model = nn.DataParallel(model).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
-lossFunc = util.soft_dice_loss
+
+# lossFunc = util.soft_dice_loss
+lossFunc = util.soft_dice_weighted_loss
 
 
 # ***** TRAIN *****
@@ -160,7 +162,8 @@ def train_model(model, lossFunc, num_epochs=100):
             x_train = torch.autograd.Variable(inputs).cuda()
             y_train = torch.autograd.Variable(masks).cuda()
             optimizer.zero_grad()
-         
+        
+            # ipdb.set_trace() 
             # forward
             output = model(x_train)
             loss = lossFunc(output, y_train)

@@ -12,10 +12,14 @@ from torchvision import transforms
 import matplotlib.pyplot as plt
 
 from skimage.filters import sobel
+import skimage.measure as measure
 
 import pandas as pd
 from random import *
 import PIL 
+
+# from scipy import signal
+from scipy import ndimage
 
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
@@ -112,7 +116,7 @@ def process_split(file_path, clustermeans, cluster, has_mask=True):
     return datas
 
 
-i
+
 def crop_nparray(img, xy):
     return img[xy[1]:xy[3], xy[0]:xy[2], :]
 
@@ -133,7 +137,6 @@ class Dataset():
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
-
     
         if self.augment == True:
             imgWidth = self.imgWidth
@@ -197,7 +200,14 @@ class Dataset():
 
             # rotate
             # take care of discretization artifacts.
-       
+      
+  
+
+        #plt.figure(2)
+        #plt.subplot(1,2,1)
+        #plt.imshow(mask.squeeze(axis=2))       
+        #plt.show()
+
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
         # if there is at least one label
@@ -207,19 +217,34 @@ class Dataset():
             edge_mask[edge_mask > 0] = 1 # binarize
 
             # centroids 
-            # ...
+            # print(mask)
+            centroid_mask = np.zeros((mask[0,:,:].shape)) #.squeeze(axis=2).shape)) 
+            rp = measure.regionprops(mask[0,:,:].numpy().astype(int)) #) # .squeeze(axis=2))
+            for props in rp:
+                y0, x0 = props.centroid
+                centroid_mask[np.int(y0), np.int(x0)] = 1
+
+            struct1 = ndimage.generate_binary_structure(2,1)
+            centroid_mask = ndimage.binary_dilation(centroid_mask, structure=struct1, iterations=3)*1
+            centroid_mask = t.from_numpy(centroid_mask).unsqueeze(0).float()
+
+
         else:
             edge_mask = mask.clone()
+            centroid_mask = mask.clone()
+
+        #plt.figure(1)
+        #plt.subplot(1,2,1)
+        #plt.imshow(centroid_mask)
+        #plt.subplot(1,2,2)
+        #plt.imshow(mask[0,:,:])               
+        #plt.show()
 
         # binary body mask
         mask_binary = mask.clone()
         mask_binary[mask > 0] = 1
-        # substract edges from mask
-        #mask_binary = mask_binary - edge_mask
-        #mask_binary[mask_binary < 0] = 0
-        # stack resulting masks
-        mask_stacked = t.cat((mask_binary,edge_mask))
-        #mask_stacked = edge_mask
+        mask_stacked = t.cat((mask_binary,edge_mask,centroid_mask), 0)
+      
         return img, mask_stacked, mask
     def __len__(self):
         return len(self.datas)
