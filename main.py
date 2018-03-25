@@ -25,7 +25,7 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 400 
+args.numEpochs = 20 
 args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
@@ -33,7 +33,7 @@ args.imgWidth = 256
 
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '0' # 0,1,2,3,4
 
 runClass = 1 
 

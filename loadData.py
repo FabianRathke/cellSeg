@@ -112,11 +112,7 @@ def process_split(file_path, clustermeans, cluster, has_mask=True):
     return datas
 
 
-
-
-
-
-
+i
 def crop_nparray(img, xy):
     return img[xy[1]:xy[3], xy[0]:xy[2], :]
 
@@ -170,67 +166,37 @@ class Dataset():
                 #plt.show()
 
 
+            raugment = randint(0,100)
 
             p = 50
-            # mirror - left/right
-            rint = randint(0, 100)
-            if p  > rint:
-                # print("Flip LR")
-                mask = np.fliplr(mask)
-                img  = np.fliplr(img)
+         
+            if 0 <= raugment <= 33:
+                # mirror - left/right
+                rint = randint(0, 100)
+                if p  > rint:
+                    # print("Flip LR")
+                    mask = np.fliplr(mask)
+                    img  = np.fliplr(img)
+    
+            elif 33 < raugment <= 66:
+                # mirror - up/down
+                rint = randint(0, 100)
+                if p > rint:
+                    # print("Flip UD")
+                    mask = np.flipud(mask)
+                    img = np.flipud(img)
 
-            # mirror - up/down
-            rint = randint(0, 100)
-            if p > rint:
-                # print("Flip UD")
-                mask = np.flipud(mask)
-                img = np.flipud(img)
+            elif 66 < raugment <= 100:
+                # transpose
+                rint = randint(0, 100)
+                if p > rint:
+                    # print("Transpose")
+                    mask = np.transpose(mask, (1,0,2))
+                    img = np.transpose(img, (1,0,2))
 
-            # transpose
-            rint = randint(0, 100)
-            if p > rint:
-                # print("Transpose")
-                mask = np.transpose(mask, (1,0,2))
-                img = np.transpose(img, (1,0,2))
 
             # rotate
             # take care of discretization artifacts.
-
-        #tsfPIL = transforms.ToPILImage()
-        #img = tsfPIL(img)
-        #mask = tsfPIL(mask)
-        #try:
-        #if self.augment == True:
-        #    #except:
-        #    #    print(img.shape)
-        #    if np.any(np.asarray(img.shape[0:2]) != 256):
-        #        img = self.st_transform(img)
-        #        mask = self.st_transform(mask)
-        #        img  = img.resize((256,256))
-        #        mask = mask.resize((256,256)) 
-         
-        #plt.subplot(2,2,2)
-        #plt.imshow(img)
-        #plt.subplot(2,2,4)
-        #plt.imshow(mask.squeeze(axis=2))
-        #print(mask.shape)
-        #plt.show()
-        # else:
-        # reshape to 256x256
-
-            # Rotation
-            # rot  = randint(-20,20)
-            # img  = img.rotate(rot)
-            # mask = mask.rotate(rot, resample=PIL.Image.NEAREST)
-
-        # Class specific normalization  
-        # df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
-        # classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 
-        # rows, cols, dims = img.shape
-        # imgmean = np.mean(np.reshape(img,(rows*cols,dims)), axis=0) 
-        # c = np.argmin( np.sum((classmean - imgmean)**2, axis=1) )
-        # img = img - classmean[c,:]
-        # img.dtype = np.uint8
        
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
@@ -239,6 +205,9 @@ class Dataset():
             # edge mask
             edge_mask = t.from_numpy(sobel(mask[0,:,:]/mask.max()).astype('float32')).unsqueeze(0) # sobel filter
             edge_mask[edge_mask > 0] = 1 # binarize
+
+            # centroids 
+            # ...
         else:
             edge_mask = mask.clone()
 
