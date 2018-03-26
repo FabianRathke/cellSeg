@@ -1,9 +1,13 @@
+import ipdb
 from pathlib import Path
 from skimage import io
 import numpy as np
 from tqdm import tqdm
 import torch as t
-import ipdb
+
+from torchvision import transforms
+
+import matplotlib.pyplot as plt
 
 from skimage.filters import sobel
 
@@ -48,13 +52,76 @@ def process(file_path, has_mask=True):
         datas.append(item)
     return datas
 
+
+def process_split(file_path, clustermeans, cluster, has_mask=True):
+    file_path = Path(file_path)
+    files = sorted(list(Path(file_path).iterdir()))
+    datas = []
+
+    for file in tqdm(files):
+        item = {}
+        imgs = []
+        for image in (file/'images').iterdir():
+            img = io.imread(image)
+            # ipdb.set_trace()
+            rows, cols, dims = img.shape
+            imgmean = np.mean(np.reshape(img.copy(),(rows*cols,dims)), axis=0)
+            imgmean.shape = (imgmean.shape[0], 1)
+            cdist = np.zeros((clustermeans.shape[0],1)) 
+            for k in range(clustermeans.shape[0]):
+                cdist[k] = np.sum((clustermeans[k,:] - imgmean[0:3])**2)
+
+            c = np.int( np.argmin( cdist ) )
+            if c == cluster:
+                imgs.append(img)
+            else:
+                continue 
+            # imgs.append(img)
+        
+        #ipdb.set_trace()
+        if len(imgs) == 1:
+            #assert len(imgs)==1
+            if img.shape[2]>3:
+                if (img[:,:,3]!=255).sum()!=0:
+                    print(img)
+
+                assert(img[:,:,3]!=255).sum()==0
+            img = img[:,:,:3]
+
+            if has_mask:
+                mask_files = list((file/'masks').iterdir())
+                masks = None
+                for ii,mask in enumerate(mask_files):
+                    mask = io.imread(mask)
+                    assert (mask[(mask!=0)]==255).all()
+                    if masks is None:
+                        H,W = mask.shape
+                        masks = np.zeros((len(mask_files),H,W))
+                    masks[ii] = mask
+                tmp_mask = masks.sum(0)
+                assert (tmp_mask[tmp_mask!=0] == 255).all()
+                for ii,mask in enumerate(masks):
+                    masks[ii] = mask/255 * (ii+1)
+                mask = masks.sum(0)
+                item['mask'] = t.from_numpy(mask)
+            item['name'] = str(file).split('/')[-1]
+            item['img'] = t.from_numpy(img)
+            datas.append(item)
+    return datas
+
+
+def crop_nparray(img, xy):
+    return img[xy[1]:xy[3], xy[0]:xy[2], :]
+
+
 class Dataset():
-    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False):
+    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False,imgWidth=256):
         self.datas = data
 #         self.datas = train_data
         self.s_transform = source_transform
         self.t_transform = target_transform
-  
+ 
+        self.imgWidth = imgWidth
         self.augment = augment
         if self.augment:
             self.st_transform = source_target_transform
@@ -63,13 +130,90 @@ class Dataset():
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
+
     
         if self.augment == True:
-            img = self.st_transform(img)
-            mask = self.st_transform(mask)
-            rot  = randint(-20,20)
-            img  = img.rotate(rot)
-            mask = mask.rotate(rot, resample=PIL.Image.NEAREST)
+            imgWidth = self.imgWidth
+
+            # do cropping to imgWidth x imgWidth if *any* dimension is larger than imgWidth
+            if np.any(np.asarray(img.shape[0:2]) > imgWidth):                
+                # print("Crop")
+                #plt.figure(1)
+                #plt.subplot(2,2,1)
+                #plt.imshow(img)
+                #plt.subplot(2,2,3)
+                #plt.imshow(mask.squeeze(axis=2))               
+
+                # crop 
+                xcoord = randint(0,img.shape[1] - imgWidth )
+                ycoord = randint(0,img.shape[0] - imgWidth )
+                mask = crop_nparray(mask,(xcoord, ycoord, xcoord+imgWidth, ycoord+imgWidth))
+                img  = crop_nparray(img, (xcoord, ycoord, xcoord+imgWidth, ycoord+imgWidth))
+
+                if np.any(np.asarray(img.shape[0:2]) != imgWidth): 
+                    print(xcoord)
+                    print(ycoord)
+                    print(img.shape)
+                    print("CROP ERROR")
+
+                #plt.figure(1)
+                #plt.subplot(2,2,2)
+                #plt.imshow(img)
+                #plt.subplot(2,2,4)
+                #plt.imshow(mask.squeeze(axis=2))               
+                #plt.show()
+
+            p = 50
+            # mirror - left/right
+            rint = randint(0, 100)
+            if p  > rint:
+                # print("Flip LR")
+                mask = np.fliplr(mask)
+                img  = np.fliplr(img)
+
+            # mirror - up/down
+            rint = randint(0, 100)
+            if p > rint:
+                # print("Flip UD")
+                mask = np.flipud(mask)
+                img = np.flipud(img)
+
+            # transpose
+            rint = randint(0, 100)
+            if p > rint:
+                # print("Transpose")
+                mask = np.transpose(mask, (1,0,2))
+                img = np.transpose(img, (1,0,2))
+
+            # rotate
+            # take care of discretization artifacts.
+
+        #tsfPIL = transforms.ToPILImage()
+        #img = tsfPIL(img)
+        #mask = tsfPIL(mask)
+        #try:
+        #if self.augment == True:
+        #    #except:
+        #    #    print(img.shape)
+        #    if np.any(np.asarray(img.shape[0:2]) != 256):
+        #        img = self.st_transform(img)
+        #        mask = self.st_transform(mask)
+        #        img  = img.resize((256,256))
+        #        mask = mask.resize((256,256)) 
+         
+        #plt.subplot(2,2,2)
+        #plt.imshow(img)
+        #plt.subplot(2,2,4)
+        #plt.imshow(mask.squeeze(axis=2))
+        #print(mask.shape)
+        #plt.show()
+        # else:
+        # reshape to 256x256
+
+            # Rotation
+            # rot  = randint(-20,20)
+            # img  = img.rotate(rot)
+            # mask = mask.rotate(rot, resample=PIL.Image.NEAREST)
 
         # Class specific normalization  
         # df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
@@ -79,9 +223,13 @@ class Dataset():
         # c = np.argmin( np.sum((classmean - imgmean)**2, axis=1) )
         # img = img - classmean[c,:]
         # img.dtype = np.uint8
-       
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
+        # reassign labels
+        mask_ = t.from_numpy(np.zeros_like(mask, dtype=np.float32))
+        for i,idx in enumerate(np.unique(mask)):
+            mask_[mask==int(idx)] = i
+        mask = mask_
         # if there is at least one label
         if mask.sum() > 0:
             # edge mask
@@ -119,13 +267,10 @@ class TestDataset():
         return len(self.datas)
 
 
-def createKSplits(l, K, random_state=None):
+def createKSplits(l, K, random_state = 0):
     ''' createKSplits(l, K): returns a list with K entries, each holding a list of indices that constitute one splits. l is the number of data points '''
     arr = np.arange(l)
-    if not random_state:
-        np.random.seed()
-    else:
-        np.random.seed(random_state)
+    np.random.seed(random_state)
     np.random.shuffle(arr)
 
     d = int (l/K)
@@ -153,8 +298,38 @@ def main():
    t.save(train_data, TRAIN_PATH)
   
 
+def split_data():
+    df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
+    classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 
+
+    # Class 0 - grayscale
+    TEST_PATH = './data/test_class0.pth'
+    print('Create test dataset for Class 0 (grayscale)')
+    test = process_split('../input/stage1_test/', classmean, 0, False)
+    t.save(test, TEST_PATH)
+   
+    #ipdb.set_trace()
+    
+    TRAIN_PATH = './data/train_class0.pth'
+    print('Create training dataset for Class 0 (grayscale)')
+    train_data = process_split('../input/stage1_train/', classmean, 0)
+    t.save(train_data, TRAIN_PATH)
+    
+    # Class 1 - RGB
+    TEST_PATH = './data/test_class1.pth'
+    print('Create test dataset for Class 1 (RGB)')
+    test = process_split('../input/stage1_test/', classmean, 1, False)
+    t.save(test, TEST_PATH)
+    
+    TRAIN_PATH = './data/train_class1.pth'
+    print('Create training dataset for Class 1 (RGB)')
+    train_data = process_split('../input/stage1_train/', classmean, 1)
+    t.save(train_data, TRAIN_PATH)
+
+
 if __name__ == "__main__":
-    main()
+    # main()
+    split_data()
 
 
 
