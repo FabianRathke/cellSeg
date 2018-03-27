@@ -120,8 +120,9 @@ def crop_nparray(img, xy):
 
 
 class Dataset():
-    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False,imgWidth=256):
+    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False,imgWidth=256,use_centroid=0):
         self.datas = data
+        self.useCentroid = use_centroid
 #         self.datas = train_data
         self.s_transform = source_transform
         self.t_transform = target_transform
@@ -215,20 +216,22 @@ class Dataset():
 
             # centroids 
             # print(mask)
-            centroid_mask = np.zeros((mask[0,:,:].shape)) #.squeeze(axis=2).shape)) 
-            rp = measure.regionprops(mask[0,:,:].numpy().astype(int)) #) # .squeeze(axis=2))
-            for props in rp:
-                y0, x0 = props.centroid
-                centroid_mask[np.int(y0), np.int(x0)] = 1
+            if self.useCentroid:
+                centroid_mask = np.zeros((mask[0,:,:].shape)) #.squeeze(axis=2).shape)) 
+                rp = measure.regionprops(mask[0,:,:].numpy().astype(int)) #) # .squeeze(axis=2))
+                for props in rp:
+                    y0, x0 = props.centroid
+                    centroid_mask[np.int(y0), np.int(x0)] = 1
 
-            struct1 = ndimage.generate_binary_structure(2,1)
-            centroid_mask = ndimage.binary_dilation(centroid_mask, structure=struct1, iterations=3)*1
-            centroid_mask = t.from_numpy(centroid_mask).unsqueeze(0).float()
+                struct1 = ndimage.generate_binary_structure(2,1)
+                centroid_mask = ndimage.binary_dilation(centroid_mask, structure=struct1, iterations=3)*1
+                centroid_mask = t.from_numpy(centroid_mask).unsqueeze(0).float()
 
 
         else:
             edge_mask = mask.clone()
-            centroid_mask = mask.clone()
+            if self.useCentroid:
+                centroid_mask = mask.clone()
 
         #plt.figure(1)
         #plt.subplot(1,2,1)
@@ -240,7 +243,11 @@ class Dataset():
         # binary body mask
         mask_binary = mask.clone()
         mask_binary[mask > 0] = 1
-        mask_stacked = t.cat((mask_binary,edge_mask,centroid_mask), 0)
+        if self.useCentroid:
+            mask_stacked = t.cat((mask_binary,edge_mask,centroid_mask), 0)
+        else:
+           mask_stacked = t.cat((mask_binary,edge_mask), 0)
+
       
         return img, mask_stacked, mask
     def __len__(self):

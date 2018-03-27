@@ -104,7 +104,7 @@ def plotExampleTest(img, mask, pred, batch, fileSize, folder = 'plots'):
     plt.close()
 
 
-def competition_loss_func(inputs, targets = None):
+def competition_loss_func(inputs, targets = None, useCentroid=0):
     ''' https://www.kaggle.com/c/data-science-bowl-2018#evaluation
         evaluates IoU (intersection over union) for various thresholds and calculates
         TPs, FPs and FNs for all objects (detected vs. ground truth). The final score
@@ -155,62 +155,61 @@ def competition_loss_func(inputs, targets = None):
                         #print(current_label)
                         current_label += 1
 
-        
-        # centroids 
-        c_mask = data_inputs[2,:]
-        c_mask[c_mask > 0.9] = 1
-        c_mask[c_mask < 0.9] = 0
-        c_mask = measure.label(c_mask)
-        centroid_mask = np.zeros((c_mask.shape))
-        rp = measure.regionprops(c_mask)
-        for props in rp:
-            y0, x0 = props.centroid
-            centroid_mask[np.int(y0), np.int(x0)] = 1
+        if useCentroid:
+            # centroids 
+            c_mask = data_inputs[2,:]
+            c_mask[c_mask > 0.9] = 1
+            c_mask[c_mask < 0.9] = 0
+            c_mask = measure.label(c_mask)
+            centroid_mask = np.zeros((c_mask.shape))
+            rp = measure.regionprops(c_mask)
+            for props in rp:
+                y0, x0 = props.centroid
+                centroid_mask[np.int(y0), np.int(x0)] = 1
 
 
-        #plt.figure(2),
-        #plt.imshow(centroid_mask)
-        #plt.show()
+            #plt.figure(2),
+            #plt.imshow(centroid_mask)
+            #plt.show()
 
-        # ipdb.set_trace()
-        current_label = 1
-        corrected = np.zeros_like(inputs)
-        for k in unique[1:]:
-            label_k = (inputs == k).astype(int)
+            # ipdb.set_trace()
+            current_label = 1
+            corrected = np.zeros_like(inputs)
+            for k in unique[1:]:
+                label_k = (inputs == k).astype(int)
 
-            seed_markers = label_k * centroid_mask
-            if seed_markers.sum() > 1:
-                label_k = morph.watershed(-ndimage.distance_transform_edt(label_k), measure.label(seed_markers), mask=label_k)
-                # print("split label")
+                seed_markers = label_k * centroid_mask
+                if seed_markers.sum() > 1:
+                    label_k = morph.watershed(-ndimage.distance_transform_edt(label_k), measure.label(seed_markers), mask=label_k)
+                    # print("split label")
 
-            unique_split, counts = np.unique(label_k, return_counts=True)
-            for u in unique_split[np.arange(len(unique_split))!=0]:
-                corrected[label_k == u] = current_label
-                current_label += 1
+                unique_split, counts = np.unique(label_k, return_counts=True)
+                for u in unique_split[np.arange(len(unique_split))!=0]:
+                    corrected[label_k == u] = current_label
+                    current_label += 1
 
-        # print(current_label)
-        inputs = corrected
+            inputs = corrected
 
-        #plt.subplot(2,2,2)
-        #plt.imshow(corrected)
-        #plt.subplot(2,2,3)
-        #plt.imshow(data_inputs[2,:])
-        #plt.show()
-        #ipdb.set_trace()
-
-        # print(current_label)
-        if 0 and np.sum(inputs-corrected):
-            plt.figure(20),
-            plt.subplot(1,2,1)
-            plt.imshow(inputs), 
-
-            plt.subplot(1,2,2)
-            plt.imshow(inputs-corrected)
-            plt.show(block=False)
+            #plt.subplot(2,2,2)
+            #plt.imshow(corrected)
+            #plt.subplot(2,2,3)
+            #plt.imshow(data_inputs[2,:])
+            #plt.show()
             #ipdb.set_trace()
 
+            # print(current_label)
+            if 0 and np.sum(inputs-corrected):
+                plt.figure(20),
+                plt.subplot(1,2,1)
+                plt.imshow(inputs), 
 
-        inputs = corrected
+                plt.subplot(1,2,2)
+                plt.imshow(inputs-corrected)
+                plt.show(block=False)
+                #ipdb.set_trace()
+
+
+            inputs = corrected
     else:
         # multi-labels from binary input
         inputs = measure.label(inputs)
