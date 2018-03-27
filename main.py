@@ -28,12 +28,9 @@ args.iterPlot = 20
 args.numEpochs = 100 
 args.learnWeights = True
 args.dataAugm = True
-args.imgWidth = 256
+args.imgWidth = 512
 
-
-
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '0' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '3' # 0,1,2,3,4
 
 runClass = 1 
 
@@ -110,10 +107,10 @@ test_trans = tsf.Compose([
 
 
 dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
-dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
+dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 2)
 
 validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
-validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
+validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 2)
 
 # ipdb.set_trace()
 
@@ -123,10 +120,10 @@ model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementat
 
 model = nn.DataParallel(model).cuda()
 
-optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
+optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
 
-# lossFunc = util.soft_dice_loss
-lossFunc = util.soft_dice_weighted_loss
+lossFunc = util.soft_dice_loss
+# lossFunc = util.soft_dice_weighted_loss
 
 
 # ***** TRAIN *****
@@ -205,42 +202,43 @@ util.save_model(model,args.modelName)
 #util.plot_results_for_images(model,dataloader)
 
 # ***** EVALUATION ********
-testset = loadData.TestDataset(TEST_PATH, test_trans)
-testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
+if 0:
+    testset = loadData.TestDataset(TEST_PATH, test_trans)
+    testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 
-# make predictions for all test samples
-model = model.eval()
-results = []
-test_ids = []
-for i, data in enumerate(testdataloader):
-    print(i)
-    inputs, shape, name = data
-    x_test = t.autograd.Variable(inputs, volatile=True).cuda()
-    output = model(x_test)
-    results.append((output.cpu().squeeze(),shape))
-    test_ids.append(name[0])
-    #idx = 0 
-    #util.plotExample(inputs[idx,:], output[idx,0,:,:].data, output[idx,0,:,:].data, 0, 0, 0, 0, True)
+    # make predictions for all test samples
+    model = model.eval()
+    results = []
+    test_ids = []
+    for i, data in enumerate(testdataloader):
+        print(i)
+        inputs, shape, name = data
+        x_test = t.autograd.Variable(inputs, volatile=True).cuda()
+        output = model(x_test)
+        results.append((output.cpu().squeeze(),shape))
+        test_ids.append(name[0])
+        #idx = 0 
+        #util.plotExample(inputs[idx,:], output[idx,0,:,:].data, output[idx,0,:,:].data, 0, 0, 0, 0, True)
 
-# upsample and encode
-new_test_ids = []
-rles = []
-for i,item in enumerate(results):
-    print(i)
-    output_t = (item[0] > 0.5).data.numpy().astype(np.uint8)
-    # upsample
-    preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
-    preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
+    # upsample and encode
+    new_test_ids = []
+    rles = []
+    for i,item in enumerate(results):
+        print(i)
+        output_t = (item[0] > 0.5).data.numpy().astype(np.uint8)
+        # upsample
+        preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
+        preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
 
-    labels = util.competition_loss_func(preds_test_upsampled)
+        labels = util.competition_loss_func(preds_test_upsampled)
 
-    rle = list(util.prob_to_rles(labels))
-    rles.extend(rle)
-    new_test_ids.extend([test_ids[i]] * len(rle))
+        rle = list(util.prob_to_rles(labels))
+        rles.extend(rle)
+        new_test_ids.extend([test_ids[i]] * len(rle))
 
-sub = pd.DataFrame()
-sub['ImageId'] = new_test_ids
-sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
+    sub = pd.DataFrame()
+    sub['ImageId'] = new_test_ids
+    sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
 
-# save to submission file
-util.save_submission_file(sub,'sub-dsbowl2018-0')
+    # save to submission file
+    util.save_submission_file(sub,'sub-dsbowl2018-0')
