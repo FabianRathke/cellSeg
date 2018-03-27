@@ -1,6 +1,4 @@
 import ipdb
-
-
 from pathlib import Path
 from skimage import io
 import numpy as np
@@ -141,7 +139,8 @@ class Dataset():
         if self.augment == True:
             imgWidth = self.imgWidth
 
-            if np.all(np.asarray(img.shape[0:2]) > imgWidth):                
+            # do cropping to imgWidth x imgWidth if *any* dimension is larger than imgWidth
+            if np.any(np.asarray(img.shape[0:2]) > imgWidth):                
                 # print("Crop")
                 #plt.figure(1)
                 #plt.subplot(2,2,1)
@@ -168,9 +167,7 @@ class Dataset():
                 #plt.imshow(mask.squeeze(axis=2))               
                 #plt.show()
 
-
             raugment = randint(0,100)
-
             p = 50
          
             if 0 <= raugment <= 33:
@@ -203,13 +200,13 @@ class Dataset():
       
   
 
-        #plt.figure(2)
-        #plt.subplot(1,2,1)
-        #plt.imshow(mask.squeeze(axis=2))       
-        #plt.show()
-
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
+        # reassign labels
+        mask_ = t.from_numpy(np.zeros_like(mask, dtype=np.float32))
+        for i,idx in enumerate(np.unique(mask)):
+            mask_[mask==int(idx)] = i
+        mask = mask_
         # if there is at least one label
         if mask.sum() > 0:
             # edge mask
@@ -265,13 +262,10 @@ class TestDataset():
         return len(self.datas)
 
 
-def createKSplits(l, K, random_state=None):
+def createKSplits(l, K, random_state = 0):
     ''' createKSplits(l, K): returns a list with K entries, each holding a list of indices that constitute one splits. l is the number of data points '''
     arr = np.arange(l)
-    if not random_state:
-        np.random.seed()
-    else:
-        np.random.seed(random_state)
+    np.random.seed(random_state)
     np.random.shuffle(arr)
 
     d = int (l/K)
@@ -303,32 +297,31 @@ def split_data():
     df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
     classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 
 
-	# Class 0 - grayscale
+    # Class 0 - grayscale
     TEST_PATH = './data/test_class0.pth'
+    print('Create test dataset for Class 0 (grayscale)')
     test = process_split('../input/stage1_test/', classmean, 0, False)
     t.save(test, TEST_PATH)
    
-    ipdb.set_trace()
+    #ipdb.set_trace()
     
     TRAIN_PATH = './data/train_class0.pth'
+    print('Create training dataset for Class 0 (grayscale)')
     train_data = process_split('../input/stage1_train/', classmean, 0)
     t.save(train_data, TRAIN_PATH)
     
     # Class 1 - RGB
     TEST_PATH = './data/test_class1.pth'
+    print('Create test dataset for Class 1 (RGB)')
     test = process_split('../input/stage1_test/', classmean, 1, False)
     t.save(test, TEST_PATH)
     
     TRAIN_PATH = './data/train_class1.pth'
+    print('Create training dataset for Class 1 (RGB)')
     train_data = process_split('../input/stage1_train/', classmean, 1)
     t.save(train_data, TRAIN_PATH)
 
 
-
 if __name__ == "__main__":
     # main()
-	split_data()
-
-
-
-
+    split_data()

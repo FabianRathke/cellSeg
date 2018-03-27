@@ -2,4 +2,8 @@ data
 *.sw*
 *pycache*
 unet
-/plots
+changes
+plots
+*.pt
+*.csv
+test*

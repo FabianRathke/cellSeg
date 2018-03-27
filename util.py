@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import torch
 from skimage import measure
 from skimage.transform import resize
@@ -11,6 +12,9 @@ import ipdb
 import os.path
 from skimage.measure import regionprops
 from skimage.morphology import binary_erosion
+
+
+from IPython import embed
 
 from models import *
 
@@ -48,20 +52,31 @@ def soft_dice_weighted_loss(inputs, targets):
     return score
 
 
-
-
-
-def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False, folder = 'plots'):
+def plotExample(img, mask, mask_multi, pred, labels_pred, epoch, batch, loss, lossComp, interactive=False, folder = 'plots'):
     ''' Plots ground truth and prediction for a cell image '''
+    cmap = matplotlib.cm.get_cmap('viridis')
+    cmap.set_under([0.8, 0.8, 0.8])
     if interactive:
         plt.ion()
-    plt.figure(figsize=(15, 6))
-    plt.subplot(131)
-    plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5)
-    plt.subplot(132)
-    plt.imshow(mask)
-    plt.subplot(133)
-    plt.imshow(pred)
+    plt.figure(figsize=(20, 10))
+    plt.subplot(241)
+    plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5); plt.axis('off')
+    plt.subplot(242)
+    plt.imshow(mask[0,:]); plt.axis('off')
+    plt.subplot(243)
+    plt.imshow(mask[1,:]); plt.axis('off')
+    plt.subplot(244)
+    vmin = .001 if mask_multi.max() > 0 else 0
+    plt.imshow(mask_multi, interpolation = 'none', cmap = cmap, vmin=vmin); plt.axis('off')
+    plt.subplot(245)
+    plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5); plt.axis('off')
+    plt.subplot(246)
+    plt.imshow(pred[0,:]); plt.axis('off')
+    plt.subplot(247)
+    plt.imshow(pred[1,:]); plt.axis('off')
+    plt.subplot(248)
+    vmin = .001 if labels_pred.max() > 0 else 0
+    plt.imshow(labels_pred, cmap = cmap, interpolation='none', vmin=vmin); plt.axis('off'); #plt.colorbar()
     plt.suptitle("Epoch {} and batch {}: Loss = {:.2f}, CompEval = {:.2f}".format(epoch, batch, loss, lossComp))
     if interactive:
         plt.pause(0.05)
@@ -70,6 +85,24 @@ def plotExample(img, mask, pred, epoch, batch, loss, lossComp, interactive=False
         plt.savefig("{}/epoch_{}_batch_{}.png".format(folder,epoch,batch))
         plt.close()
 
+def plotExampleTest(img, mask, pred, batch, fileSize, folder = 'plots'):
+    ''' Plots ground truth and prediction for a cell image '''
+    cmap = matplotlib.cm.get_cmap('viridis')
+    cmap.set_under([0.8, 0.8, 0.8])
+    plt.figure(figsize=(20, 5))
+    plt.subplot(141)
+    plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5); plt.axis('off')
+    plt.subplot(142)
+    plt.imshow(mask[0,:]); plt.axis('off')
+    plt.subplot(143)
+    plt.imshow(mask[1,:]); plt.axis('off')
+    plt.subplot(144)
+    vmin = .001 if pred.max() > 0 else 0
+    plt.imshow(pred, interpolation = 'none', cmap = cmap, vmin=vmin); plt.axis('off')
+    plt.suptitle("id: {} ({:d} x {:d})".format(batch, fileSize[0], fileSize[1]))
+    plt.savefig("{}/id_{}.png".format(folder,batch))
+    plt.close()
+
 
 def competition_loss_func(inputs, targets = None):
     ''' https://www.kaggle.com/c/data-science-bowl-2018#evaluation
@@ -77,7 +110,6 @@ def competition_loss_func(inputs, targets = None):
         TPs, FPs and FNs for all objects (detected vs. ground truth). The final score
         is averaged over all thresholds. '''
 
-    # ipdb.set_trace()
     data_inputs = inputs.copy()
     thresholds = np.arange(0.5,1,0.05)
   
@@ -90,13 +122,6 @@ def competition_loss_func(inputs, targets = None):
         bodies = inputs[0,:]
         bodies[bodies > 0.9] = 1 # threshold
         inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
-
-        # inputs = measure.label(diff)
-
-        #plt.figure(20),
-        #plt.subplot(2,2,1)
-        #plt.imshow(inputs), 
-
         unique, counts = np.unique(inputs, return_counts=True)
         radi = np.sqrt(np.median(counts[1:-1])/np.pi)
         # get average size of nuclei
@@ -152,6 +177,7 @@ def competition_loss_func(inputs, targets = None):
         corrected = np.zeros_like(inputs)
         for k in unique[1:]:
             label_k = (inputs == k).astype(int)
+
             seed_markers = label_k * centroid_mask
             if seed_markers.sum() > 1:
                 label_k = morph.watershed(-ndimage.distance_transform_edt(label_k), measure.label(seed_markers), mask=label_k)
@@ -172,16 +198,37 @@ def competition_loss_func(inputs, targets = None):
         #plt.show()
         #ipdb.set_trace()
 
+        # print(current_label)
+        if 0 and np.sum(inputs-corrected):
+            plt.figure(20),
+            plt.subplot(1,2,1)
+            plt.imshow(inputs), 
+
+            plt.subplot(1,2,2)
+            plt.imshow(inputs-corrected)
+            plt.show(block=False)
+            #ipdb.set_trace()
+
+
+        inputs = corrected
     else:
         # multi-labels from binary input
-        inputs =  measure.label(inputs)
+        inputs = measure.label(inputs)
+
+    # randomly shuffle labels for better visibility during plotting
+    labels = np.unique(inputs)[1:]
+    np.random.shuffle(labels)
+    labels = np.concatenate((np.array([0]), labels))
+    inputs = labels[inputs]
 
     if targets is None:
         return inputs
 
     # number of labels in ground truth
     labels = np.unique(targets).astype('int32')
+    # number of predicted labels
     labels_inputs = np.unique(inputs).astype('int32')
+    # keep track of the matching between ground truth and predicted labels
     matched_labels = np.zeros((len(labels)-1,2))
     IoU = np.zeros(len(labels)-1)
     # plot ground truth and predicted labels
@@ -194,7 +241,11 @@ def competition_loss_func(inputs, targets = None):
     for i in range(1,len(labels)):
         # check for predicted objects which overlaps the current ground truth object
         unique, counts = np.unique(inputs[targets==labels[i]], return_counts=True)
-        pred_label = unique[np.argmax(counts)]
+        # remove background as label
+        if len(unique) > 1:
+            counts = counts[unique!=0]
+            unique = unique[unique!=0]
+        pred_label = unique[np.argmax(counts)] # get the object with the largets overlap
         matched_labels[i-1] = [labels[i],pred_label]
       
         # plot current cell and associated prediction
@@ -214,28 +265,80 @@ def competition_loss_func(inputs, targets = None):
             IoU[i-1] = -1
 
     score = 0
-    for t in thresholds:
+    allScores = np.zeros(len(thresholds))
+    for i, t in enumerate(thresholds):
         TP = len(matched_labels[IoU > t, 1])
         FP = len(labels_inputs) - 1 - TP
         FN = len(labels) - 1 - TP
-        score += TP/(TP + FP + FN + 10**-10)
+        allScores[i] = TP/(TP + FP + FN + 10**-10)
 
-    score /= len(thresholds)
-    return score, inputs
+    score = np.sum(allScores)/len(thresholds)
+    # save all information in dict for debugging
+    info = {"gt": targets, "pred": inputs, "matched_labels": matched_labels, "IoU": IoU, "allScores": allScores}
 
-def plot_all_results(model, dataloader, folder = 'gallery'):
+    return score, inputs, info
+
+def plotLabels(img, info, epoch, batch, score, folder):
+    ''' Plot labels in different colors, depending on being TP, FP, or FN'''
+    cmap = matplotlib.cm.get_cmap('viridis')
+    cmap.set_under([0.8, 0.8, 0.8])
+
+    cmap1 = np.matlib.repmat(np.array([0, 0, 1, 1]),64,1) # blue
+    cmap2 = np.matlib.repmat(np.array([1, 0, 0, 1]),64,1) # red
+    cmap3 = plt.cm.RdYlGn(np.linspace(0., 1, 128))
+    cmap3[0] = [0.8, 0.8, 0.8, 1]
+    colors = np.vstack((cmap1, cmap2, cmap3))
+    mymap = matplotlib.colors.LinearSegmentedColormap.from_list('my_colormap', colors)
+    plt.figure(figsize=(22, 6))
+    # plot Image
+    plt.subplot(141)
+    plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5); plt.axis('off')
+    # plot ground truth
+    plt.subplot(142)
+    vmin = .001 if np.max(info['gt']) > 0 else 0
+    plt.imshow(info['gt'], cmap = cmap, vmin = vmin); plt.axis('off'); plt.gca().set_title('Ground Truth')
+    plt.subplot(143)
+    vmin = .001 if np.max(info['pred']) > 0 else 0
+    plt.imshow(info['pred'], cmap = cmap, vmin = vmin); plt.axis('off'); plt.gca().set_title('Prediction')
+    plt.subplot(144);
+    if info['pred'].max() > 0:
+        # prepare data to plot
+        pred = info['pred']
+        plot = np.zeros_like(pred, dtype=float)
+        FP = np.setdiff1d(np.unique(pred), info['matched_labels'][:,1])
+        FP = FP[FP > 0]
+        for i in FP:
+            plot[pred==i] = -1
+
+        FN = info['matched_labels'][info['matched_labels'][:,1] == 0, 0]
+        for i in FN:
+            plot[info['gt']==i] = -0.5
+
+        TP = info['matched_labels'][info['IoU'] > 0, 0]
+        for i in TP:
+            plot[pred == info['matched_labels'][int(i)-1][1]] = info['IoU'][int(i-1)]
+        plt.imshow(plot, interpolation = 'none', cmap = mymap, vmin = -1, vmax = 1); plt.axis('off'); plt.gca().set_title('Quality Prediction')
+    else:
+        plt.imshow(info['pred'], cmap = cmap)
+   
+    #plt.show(block=False)
+    plt.suptitle("Epoch {} and batch {}: Competition-Loss = {:.2f}".format(epoch, batch, score))
+    plt.savefig("{}/epoch_{}_batch_{}_quality.png".format(folder,epoch,batch))
+    plt.close()
+
+
+def plot_all_predictions(model, dataloader, folder = 'plots/gallery'):
     ''' predicts and plots all scans in dataloader using model '''
-    for data in dataloader:
-        
-        ipdb.set_trace()
-
+    for i, data in enumerate(dataloader):
+        print(i)
         inputs, masks, masks_multiLabel = data
         x_train = torch.autograd.Variable(inputs).cuda()
         output = model(x_train)
 
         for idx in range(inputs.shape[0]):
-            score, labels_pred = competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
-            plotExample(inputs[idx,:], masks[idx,:], labels_pred, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), score, False, folder)
+            score, labels_pred, info = competition_loss_func(output[idx,:].data.cpu().numpy(), masks_multiLabel[idx,0,:].numpy())
+            plotExample(inputs[idx,:], masks[idx,:],masks_multiLabel[idx,0,:], output.data[idx,:], labels_pred, i, idx, 0, score, False, folder)
+            plotLabels(inputs[idx,:], info, i, idx, score, folder)
 
 
 def rle_encoding(x):
@@ -284,4 +387,70 @@ def load_model(PATH):
     
     return torch.load(PATH)
 
-    
+
+# ***** TRAIN *****
+
+def evaluate_model(model, lossFunc, validdataloader):
+    running_accuracy = 0
+    running_score = 0
+    for i, data in enumerate(validdataloader, 0):
+        inputs, masks, masks_multiLabel = data
+        x_valid = torch.autograd.Variable(inputs).cuda()
+        y_valid = torch.autograd.Variable(masks).cuda()
+
+        # forward
+        output = model(x_valid)
+        loss = lossFunc(output, y_valid)
+
+        # statistics
+        running_accuracy += loss.data
+
+        for j in range(inputs.shape[0]):
+            # evalute competition loss function
+            score, _, _ = competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+            running_score += score
+
+    return (1.0-running_accuracy/(i+1.0)), running_score/len(validdataloader.dataset)
+
+
+def train_model(model, optimizer, lossFunc, dataloader, validdataloader, args):
+    for epoch in range(args.numEpochs):
+        running_loss = 0; running_loss_comp = 0
+        for i, data in enumerate(dataloader, 0):
+            inputs, masks, masks_multiLabel = data
+            x_train = torch.autograd.Variable(inputs).cuda()
+            y_train = torch.autograd.Variable(masks).cuda()
+            optimizer.zero_grad()
+
+            # forward
+            output = model(x_train)
+            loss = lossFunc(output, y_train)
+
+            # train
+            loss.backward()
+            optimizer.step()
+
+            # statistics
+            running_loss += loss.data
+#            if epoch > 5:
+#                for j in range(inputs.shape[0]): # evalute competition loss function
+#                    score, _, _  = competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+#                    running_loss_comp += score
+
+            if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batch
+                print('[%d, %5d] loss: %.3f (score: %.3f)' %
+                (epoch + 1, i + 1, running_loss / args.iterPrint, running_loss_comp/args.iterPrint))
+                running_loss = 0.0; running_loss_comp = .0
+
+            # plot some segmented training examples
+            if 0 and i % args.iterPlot == args.iterPlot-1:
+                idx = 0
+                #ipdb.set_trace()
+                score, _ = competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
+                plotExample(inputs[idx,:], masks[idx,0,:,:], output[idx,0,:,:].data, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), score, False)
+
+        if validdataloader:
+            acc, score = evaluate_model(model, lossFunc, validdataloader)
+            print('acc: %.3f, score: %.3f' % (acc, score))
+
+    return model
