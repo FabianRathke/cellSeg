@@ -330,7 +330,3 @@ def split_data():
 if __name__ == "__main__":
     # main()
     split_data()
-
-
-
-

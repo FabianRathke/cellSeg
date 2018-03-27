@@ -70,6 +70,24 @@ def plotExample(img, mask, mask_multi, pred, labels_pred, epoch, batch, loss, lo
         plt.savefig("{}/epoch_{}_batch_{}.png".format(folder,epoch,batch))
         plt.close()
 
+def plotExampleTest(img, mask, pred, batch, fileSize, folder = 'plots'):
+    ''' Plots ground truth and prediction for a cell image '''
+    cmap = matplotlib.cm.get_cmap('viridis')
+    cmap.set_under([0.8, 0.8, 0.8])
+    plt.figure(figsize=(20, 5))
+    plt.subplot(141)
+    plt.imshow(img.permute(1, 2, 0) * 0.5 + 0.5); plt.axis('off')
+    plt.subplot(142)
+    plt.imshow(mask[0,:]); plt.axis('off')
+    plt.subplot(143)
+    plt.imshow(mask[1,:]); plt.axis('off')
+    plt.subplot(144)
+    vmin = .001 if pred.max() > 0 else 0
+    plt.imshow(pred, interpolation = 'none', cmap = cmap, vmin=vmin); plt.axis('off')
+    plt.suptitle("id: {} ({:d} x {:d})".format(batch, fileSize[0], fileSize[1]))
+    plt.savefig("{}/id_{}.png".format(folder,batch))
+    plt.close()
+
 
 def competition_loss_func(inputs, targets = None):
     ''' https://www.kaggle.com/c/data-science-bowl-2018#evaluation
@@ -96,7 +114,7 @@ def competition_loss_func(inputs, targets = None):
         
         current_label = 1
         corrected = np.zeros_like(inputs)
-        for k in unique[1:-1]:
+        for k in unique[1:]:
             label_k = (inputs == k).astype(int)
             rprop = regionprops(label_k)
             n_label_k = np.sum(label_k)
@@ -131,13 +149,10 @@ def competition_loss_func(inputs, targets = None):
             plt.show(block=False)
             #ipdb.set_trace()
 
-        ipdb.set_trace()
         inputs = corrected
     else:
         # multi-labels from binary input
         inputs = measure.label(inputs)
-
-    ipdb.set_trace()
 
     # randomly shuffle labels for better visibility during plotting
     labels = np.unique(inputs)[1:]
@@ -311,4 +326,70 @@ def load_model(PATH):
     
     return torch.load(PATH)
 
-    
+
+# ***** TRAIN *****
+
+def evaluate_model(model, lossFunc, validdataloader):
+    running_accuracy = 0
+    running_score = 0
+    for i, data in enumerate(validdataloader, 0):
+        inputs, masks, masks_multiLabel = data
+        x_valid = torch.autograd.Variable(inputs).cuda()
+        y_valid = torch.autograd.Variable(masks).cuda()
+
+        # forward
+        output = model(x_valid)
+        loss = lossFunc(output, y_valid)
+
+        # statistics
+        running_accuracy += loss.data
+
+        for j in range(inputs.shape[0]):
+            # evalute competition loss function
+            score, _, _ = competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+            running_score += score
+
+    return (1.0-running_accuracy/(i+1.0)), running_score/len(validdataloader.dataset)
+
+
+def train_model(model, optimizer, lossFunc, dataloader, validdataloader, args):
+    for epoch in range(args.numEpochs):
+        running_loss = 0; running_loss_comp = 0
+        for i, data in enumerate(dataloader, 0):
+            inputs, masks, masks_multiLabel = data
+            x_train = torch.autograd.Variable(inputs).cuda()
+            y_train = torch.autograd.Variable(masks).cuda()
+            optimizer.zero_grad()
+
+            # forward
+            output = model(x_train)
+            loss = lossFunc(output, y_train)
+
+            # train
+            loss.backward()
+            optimizer.step()
+
+            # statistics
+            running_loss += loss.data
+#            if epoch > 5:
+#                for j in range(inputs.shape[0]): # evalute competition loss function
+#                    score, _, _  = competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy())
+#                    running_loss_comp += score
+
+            if i % args.iterPrint == args.iterPrint-1:    # print every iterPrint mini-batch
+                print('[%d, %5d] loss: %.3f (score: %.3f)' %
+                (epoch + 1, i + 1, running_loss / args.iterPrint, running_loss_comp/args.iterPrint))
+                running_loss = 0.0; running_loss_comp = .0
+
+            # plot some segmented training examples
+            if 0 and i % args.iterPlot == args.iterPlot-1:
+                idx = 0
+                #ipdb.set_trace()
+                score, _ = competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
+                plotExample(inputs[idx,:], masks[idx,0,:,:], output[idx,0,:,:].data, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), score, False)
+
+        if validdataloader:
+            acc, score = evaluate_model(model, lossFunc, validdataloader)
+            print('acc: %.3f, score: %.3f' % (acc, score))
+
+    return model
