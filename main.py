@@ -148,9 +148,16 @@ def train_model(model, lossFunc, num_epochs=100):
     return model
 
 
+def str2bool(v):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
-if __name__ == "__main__":
+if  __name__ == "__main__":
   
 
     # ***** SET PARAMETERS *****
@@ -158,6 +165,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--gpu", help="select gpu(s)")
     parser.add_argument("--cls", help="select class")
+    parser.add_argument("--heq", type=str2bool, help="adaptive histogram equalization")
 
     args = parser.parse_args()
     args.iterPrint = 5
@@ -171,11 +179,15 @@ if __name__ == "__main__":
     if not args.gpu:
         args.gpu = '0'           
 
+    if not args.heq:
+        args.heq = False
+
     if not args.cls:
         args.cls = [0, 1]
 
     print("Training class " + ', '.join(map(str, args.cls)))
-    
+    print(args.heq)
+     
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu # 0,1,2,3,4
 
     for runClass in args.cls:
@@ -198,12 +210,13 @@ if __name__ == "__main__":
 
         s_trans, t_trans, st_trans = norm_trans(args.dataAugm)    
 
-        dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
+        dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
         dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
-        validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
-        validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
+        # ipdb.set_trace()
 
+        validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
+        validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)  
 
         # ***** SET MODEL *****
         # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation

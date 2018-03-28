@@ -14,7 +14,10 @@ import skimage.measure as measure
 
 import pandas as pd
 from random import *
-import PIL 
+import PIL
+
+from skimage import exposure
+ 
 
 # from scipy import signal
 from scipy import ndimage
@@ -120,10 +123,11 @@ def crop_nparray(img, xy):
 
 
 class Dataset():
-    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False,imgWidth=256,use_centroid=0):
+    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False,imgWidth=256,use_centroid=0,histEq=False):
         self.datas = data
         self.useCentroid = use_centroid
-#         self.datas = train_data
+        self.hist_eq = histEq
+
         self.s_transform = source_transform
         self.t_transform = target_transform
  
@@ -136,7 +140,10 @@ class Dataset():
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
-    
+
+        if self.hist_eq:
+            img = (exposure.equalize_adapthist(img, clip_limit=0.03)*255).astype(np.uint8)
+       
         if self.augment == True:
             imgWidth = self.imgWidth
 
