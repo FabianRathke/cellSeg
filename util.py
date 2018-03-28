@@ -122,12 +122,14 @@ def competition_loss_func(inputs, targets = None, useCentroid=0):
         bodies = inputs[0,:]
         bodies[bodies > 0.9] = 1 # threshold
         inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
+        
+        # ipdb.set_trace()
         unique, counts = np.unique(inputs, return_counts=True)
         radi = np.sqrt(np.median(counts[1:-1])/np.pi)
         # get average size of nuclei
 
         # convex hull        
-        if 0:
+        if 1:
             current_label = 1
             corrected = np.zeros_like(inputs)
             for k in unique[1:]:

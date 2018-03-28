@@ -19,38 +19,6 @@ import loadData
 import util
 
 
-# ***** SET PARAMETERS *****
-
-parser = argparse.ArgumentParser()
-args = parser.parse_args()
-args.iterPrint = 5
-args.iterPlot = 20
-args.numEpochs = 100 
-args.learnWeights = True
-args.dataAugm = True
-args.imgWidth = 512
-args.useCentroid = 0
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '3' # 0,1,2,3,4
-
-runClass = 1 
-
-args.modelName = 'model-cl' + str(runClass) + '-0'
-args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
-
-# ***** LOAD DATA ********
-TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
-TEST_PATH = './data/test_class' + str(runClass) + '.pth'
-
-
-# Class 0: 541
-# Class 1: 124
-trainSamples = 541 if (runClass == 0) else 124
-
-
-splits = loadData.createKSplits(trainSamples, 5, random_state=0)
-train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
-
 
 # ***** LOAD DATA ********
 # TRAIN_PATH = './data/train.pth'
@@ -59,76 +27,56 @@ train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 # train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 
 
-normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
-# normalize = tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588], std = [0.03701544,  0.05455154,  0.03268249])
+def norm_trans(dataAugm):
 
-if args.dataAugm:
-    st_trans = tsf.Compose([
-        tsf.ToPILImage(),
-	# tsf.Resize((256,256)) # 382
-    ])
+    normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
+    # normalize = tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588], std = [0.03701544,  0.05455154,  0.03268249])
 
-    s_trans = tsf.Compose([
-        # tsf.CenterCrop(256)
-        tsf.ToPILImage(),
-        tsf.Resize((args.imgWidth,args.imgWidth)), # 382
-        tsf.ToTensor(),
-        normalize,
-    ])
+    if dataAugm:
+        st_trans = tsf.Compose([
+            tsf.ToPILImage(),
+        # tsf.Resize((256,256)) # 382
+        ])
 
-    t_trans = tsf.Compose([
-        # tsf.CenterCrop(256),
-        tsf.ToPILImage(),
-        tsf.Resize((args.imgWidth,args.imgWidth),interpolation=PIL.Image.NEAREST), # 382
-        tsf.ToTensor()
-    ])
-else:
-    st_trans = None
+        s_trans = tsf.Compose([
+            # tsf.CenterCrop(256)
+            tsf.ToPILImage(),
+            tsf.Resize((args.imgWidth,args.imgWidth)), # 382
+            tsf.ToTensor(),
+            normalize,
+        ])
 
-    s_trans = tsf.Compose([
+        t_trans = tsf.Compose([
+            # tsf.CenterCrop(256),
+            tsf.ToPILImage(),
+            tsf.Resize((args.imgWidth,args.imgWidth),interpolation=PIL.Image.NEAREST), # 382
+            tsf.ToTensor()
+        ])
+    else:
+        st_trans = None
+
+        s_trans = tsf.Compose([
+            tsf.ToPILImage(),
+            tsf.Resize((256,256)),
+            tsf.ToTensor(),
+            normalize,
+        ])
+        t_trans = tsf.Compose([
+            tsf.ToPILImage(),
+            tsf.Resize((256,256),interpolation=PIL.Image.NEAREST),
+            tsf.ToTensor()
+        ])
+
+
+    test_trans = tsf.Compose([
         tsf.ToPILImage(),
         tsf.Resize((256,256)),
         tsf.ToTensor(),
-        normalize,
-    ])
-    t_trans = tsf.Compose([
-        tsf.ToPILImage(),
-        tsf.Resize((256,256),interpolation=PIL.Image.NEAREST),
-        tsf.ToTensor()
-    ])
+        normalize
+    ])    
 
+    return s_trans, t_trans, st_trans
 
-test_trans = tsf.Compose([
-    tsf.ToPILImage(),
-    tsf.Resize((256,256)),
-    tsf.ToTensor(),
-    normalize
-])    
-
-
-
-dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
-dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 2)
-
-validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
-validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 2)
-
-# ipdb.set_trace()
-
-# ***** SET MODEL *****
-# model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-
-if args.useCentroid:
-    model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementation
-else:
-    model = UNet2(3,2,learn_weights=args.learnWeights) # Kaggle notebook implementation
-
-model = nn.DataParallel(model).cuda()
-
-optimizer = torch.optim.Adam(model.parameters(),lr = 1e-3)
-
-lossFunc = util.soft_dice_loss
-# lossFunc = util.soft_dice_weighted_loss
 
 
 # ***** TRAIN *****
@@ -153,7 +101,7 @@ def evaluate_model(model, lossFunc):
             score, _, _ = util.competition_loss_func(output[j,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy(), args.useCentroid)
             running_score += score 
 
-    return (1.0-running_accuracy/(i+1.0)), running_score/len(validdataloader.dataset)
+    return (1.0-running_accuracy/(i+1.0)), 0 #, running_score/len(validdataloader.dataset)
 
 
 def train_model(model, lossFunc, num_epochs=100):
@@ -194,15 +142,116 @@ def train_model(model, lossFunc, num_epochs=100):
                     score, _, _  = util.competition_loss_func(output[j,0,:].data.cpu().numpy(),masks_multiLabel[j,0,:].numpy(), args.useCentroid)
                     print(score)
 
-        acc, score = evaluate_model(model, lossFunc)
-        print('acc: %.3f, score: %.3f' % (acc, score))
+        #acc, score = evaluate_model(model, lossFunc)
+        #print('acc: %.3f, score: %.3f' % (acc, score))  
 
     return model
+
+
+
+
+if __name__ == "__main__":
   
-model = train_model(model, lossFunc, args.numEpochs)
+
+    # ***** SET PARAMETERS *****
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--gpu", help="select gpu(s)")
+    parser.add_argument("--cls", help="select class")
+
+    args = parser.parse_args()
+    args.iterPrint = 5
+    args.iterPlot = 20
+    args.numEpochs = 100
+    args.learnWeights = True
+    args.dataAugm = True
+    args.imgWidth = 256
+    args.useCentroid = 0
+
+    if not args.gpu:
+        args.gpu = '0'           
+
+    if not args.cls:
+        args.cls = [0, 1]
+
+    print("Training class " + ', '.join(map(str, args.cls)))
+    
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu # 0,1,2,3,4
+
+    for runClass in args.cls:
+
+        args.modelName = 'model-cl' + str(runClass) + '-0'
+        args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
+
+        # ***** LOAD DATA ********
+        TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
+        TEST_PATH = './data/test_class' + str(runClass) + '.pth'
+
+        # Class 0: 541
+        # Class 1: 124
+        trainSamples = 541 if (runClass == 0) else 124
+
+        splits = loadData.createKSplits(trainSamples, 5, random_state=0)
+        splits[0] = [] # use all data for training
+
+        train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
+
+        s_trans, t_trans, st_trans = norm_trans(args.dataAugm)    
+
+        dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
+        dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
+
+        validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
+        validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
 
 
-util.save_model(model,args.modelName) 
+        # ***** SET MODEL *****
+        # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
+
+        if args.useCentroid:
+            model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementation
+        else:
+            model = UNet2(3,2,learn_weights=args.learnWeights) # Kaggle notebook implementation
+
+        model = nn.DataParallel(model).cuda()
+
+        optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
+
+        lossFunc = util.soft_dice_loss
+        # lossFunc = util.soft_dice_weighted_loss
+
+        model = train_model(model, lossFunc, args.numEpochs)
+
+        util.save_model(model,args.modelName) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #util.plot_results_for_images(model,dataloader)
 

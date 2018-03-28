@@ -168,32 +168,32 @@ class Dataset():
                 #plt.imshow(mask.squeeze(axis=2))               
                 #plt.show()
 
-            raugment = randint(0,100)
+            #raugment = randint(0,100)
             p = 50
          
-            if 0 <= raugment <= 33:
-                # mirror - left/right
-                rint = randint(0, 100)
-                if p  > rint:
-                    # print("Flip LR")
-                    mask = np.fliplr(mask)
-                    img  = np.fliplr(img)
+            #if 0 <= raugment <= 33:
+            # mirror - left/right
+            rint = randint(0, 100)
+            if p  > rint:
+                # print("Flip LR")
+                mask = np.fliplr(mask)
+                img  = np.fliplr(img)
     
-            elif 33 < raugment <= 66:
-                # mirror - up/down
-                rint = randint(0, 100)
-                if p > rint:
-                    # print("Flip UD")
-                    mask = np.flipud(mask)
-                    img = np.flipud(img)
+            #elif 33 < raugment <= 66:
+            # mirror - up/down
+            rint = randint(0, 100)
+            if p > rint:
+                # print("Flip UD")
+                mask = np.flipud(mask)
+                img = np.flipud(img)
 
-            elif 66 < raugment <= 100:
-                # transpose
-                rint = randint(0, 100)
-                if p > rint:
-                    # print("Transpose")
-                    mask = np.transpose(mask, (1,0,2))
-                    img = np.transpose(img, (1,0,2))
+            #elif 66 < raugment <= 100:
+            # transpose
+            rint = randint(0, 100)
+            if p > rint:
+                # print("Transpose")
+                mask = np.transpose(mask, (1,0,2))
+                img = np.transpose(img, (1,0,2))
 
 
             # rotate
