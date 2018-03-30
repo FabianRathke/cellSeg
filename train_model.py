@@ -24,12 +24,13 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 100 
+args.numEpochs = 125
 args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
+args.normalize = True
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2,3' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,3,4' # 0,1,2,3,4
 print("Using gpus {}.".format(os.environ['CUDA_VISIBLE_DEVICES']))
 
 normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
@@ -69,8 +70,9 @@ else:
     ])
 
 
+
 # class 0 = grayscale
-for runClass in range(2):
+for runClass in range(1):
     args.modelName = 'model-cl' + str(runClass) + '-0'
     args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
 
@@ -89,26 +91,28 @@ for runClass in range(2):
     train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 
     normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
+    #lossFunc = util.soft_dice_loss
+    lossFunc = util.cross_entropy
     # normalize = tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588], std = [0.03701544,  0.05455154,  0.03268249])
 
-    dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
+    dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, True, args.imgWidth, maskConf = [0,0,0])
     dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
-    if len(val_data) > 0:
-        validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth)
-        validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
-    else:
-        validdataloader = None
+    validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, True, args.imgWidth, maskConf = [0,0,0])
+    validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
 
-    # ***** SET MODEL *****
     #model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-    model = UNet2(3,2,learn_weights=args.learnWeights) # Kaggle notebook implementation
+    model = UNet2(3,3,learn_weights=args.learnWeights, softmax=True) # Kaggle notebook implementation
     model = nn.DataParallel(model).cuda()
 
     optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
-    lossFunc = util.soft_dice_loss
 
     model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
     util.save_model(model,args.modelName) 
+    #model.eval()
+
+    #numModel = [6]
+    #model = util.load_model('./model-cl' + str(runClass) + '-' + str(numModel[0]) + '.pt')
+    #model = model.module.eval()
 
     #util.plot_all_predictions(model,validdataloader,'plots/gallery_'+str(runClass))

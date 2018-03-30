@@ -8,6 +8,8 @@ from scipy import ndimage
 import skimage.morphology as morph
 from skimage.morphology import watershed
 from skimage.feature import peak_local_max
+from skimage.restoration import denoise_tv_chambolle
+from skimage import exposure
 import ipdb
 import os.path
 from skimage.measure import regionprops
@@ -16,7 +18,7 @@ from models import *
 
 # ****** LOSS FUNCTION ******
 def soft_dice_loss(inputs, targets):
-    num = targets.size(0)
+    num = targets.size(0) # number of batches
     m1  = inputs.view(num,-1)
     m2  = targets.view(num,-1)
     intersection = (m1 * m2)
@@ -35,6 +37,18 @@ def soft_dice_loss2(inputs, targets):
     score = 2. * (intersection.sum(1)+1) / (m1.sum(1) + m2.sum(1) - intersection.sum(1) + 1)
     score = - torch.log( score.sum() )
     return score
+
+
+def cross_entropy(inputs, targets):
+    ''' Cross Entropy Loss
+
+        Targets holds binary masks for all classes and a weighting mask in the last layer '''
+
+    numClasses = targets.size(1)-1
+    # cross entropy w_{pixel}*\sum_{classes} target(pixel, class) * log(inputs(pixel, class))
+    score = -t.sum(t.sum(t.log(inputs)*targets[:,0:numClasses,:],dim=1)*targets[:,-1,:,:])
+    #ipdb.set_trace()
+    return score/targets.size(0)
 
 
 def plotExample(img, mask, mask_multi, pred, labels_pred, epoch, batch, loss, lossComp, interactive=False, folder = 'plots'):
@@ -97,9 +111,13 @@ def competition_loss_func(inputs, targets = None):
 
     data_inputs = inputs.copy()
     thresholds = np.arange(0.5,1,0.05)
-  
+ 
     if inputs.shape[0] > 1:
-        diff = inputs[0,:]-inputs[1,:]
+        if inputs.shape[0] > 2:
+            diff = inputs[2,:]-inputs[1,:]
+        else:
+            diff = inputs[0,:]-inputs[1,:]
+            
         diff[diff < 0.9] = 0
         diff[diff > 0.9] = 1
 	#plt.subplot(221); plt.imshow(inputs[0,:]); plt.subplot(222); plt.imshow(inputs[1,:]); plt.subplot(223); plt.imshow(diff); plt.subplot(224); plt.imshow(targets); plt.show()
@@ -107,7 +125,6 @@ def competition_loss_func(inputs, targets = None):
         bodies = inputs[0,:]
         bodies[bodies > 0.9] = 1 # threshold
         inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
-
         unique, counts = np.unique(inputs, return_counts=True)
         radi = np.sqrt(np.median(counts[1:-1])/np.pi)
         # get average size of nuclei
@@ -119,7 +136,8 @@ def competition_loss_func(inputs, targets = None):
             rprop = regionprops(label_k)
             n_label_k = np.sum(label_k)
             if n_label_k > 30: # filter all cells smaller than 30 pixel
-                n_hull = rprop[0].convex_area - n_label_k # size convex hull - actual predicted cell size
+                n_hull = rprop[0].convex_area - n_label_k # size convex hull - actual predicted cell size 
+                
                 if n_hull/n_label_k > 0.2:
                     # radi = np.sqrt((n_label_k)/np.pi)
                     fprint = np.int(np.maximum(2*np.floor(radi/2)+1,3))
@@ -273,7 +291,8 @@ def plot_all_predictions(model, dataloader, folder = 'plots/gallery'):
         inputs, masks, masks_multiLabel = data
         x_train = torch.autograd.Variable(inputs).cuda()
         output = model(x_train)
-
+        ipdb.set_trace()
+    
         for idx in range(inputs.shape[0]):
             score, labels_pred, info = competition_loss_func(output[idx,:].data.cpu().numpy(), masks_multiLabel[idx,0,:].numpy())
             plotExample(inputs[idx,:], masks[idx,:],masks_multiLabel[idx,0,:], output.data[idx,:], labels_pred, i, idx, 0, score, False, folder)
@@ -388,8 +407,8 @@ def train_model(model, optimizer, lossFunc, dataloader, validdataloader, args):
                 score, _ = competition_loss_func(output[idx,0,:].data.cpu().numpy(),masks_multiLabel[idx,0,:].numpy())
                 plotExample(inputs[idx,:], masks[idx,0,:,:], output[idx,0,:,:].data, epoch, i, lossFunc(output[idx,:].data.cpu(), masks[idx,:]), score, False)
 
-        if validdataloader:
-            acc, score = evaluate_model(model, lossFunc, validdataloader)
-            print('acc: %.3f, score: %.3f' % (acc, score))
+        #if validdataloader and epoch > 5:
+            #acc, score = evaluate_model(model, lossFunc, validdataloader)
+            #print('acc: %.3f, score: %.3f' % (acc, score))
 
     return model

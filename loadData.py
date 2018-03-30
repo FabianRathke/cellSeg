@@ -4,13 +4,18 @@ from skimage import io
 import numpy as np
 from tqdm import tqdm
 import torch as t
+import sys
 
 from torchvision import transforms
 
 import matplotlib.pyplot as plt
-
+from skimage.restoration import denoise_tv_chambolle
+from skimage import exposure
 from skimage.filters import sobel
+from skimage.morphology import square, dilation
+from scipy import ndimage
 
+import util
 import pandas as pd
 from random import *
 import PIL 
@@ -115,35 +120,42 @@ def crop_nparray(img, xy):
 
 
 class Dataset():
-    def __init__(self,data,source_transform,target_transform,source_target_transform=None,augment=False,imgWidth=256):
-        self.datas = data
-#         self.datas = train_data
+    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, normalize=False, imgWidth=256, maskConf = [1, 0, 0]):
         self.s_transform = source_transform
         self.t_transform = target_transform
  
         self.imgWidth = imgWidth
         self.augment = augment
+
         if self.augment:
             self.st_transform = source_target_transform
+
+        self.names = ['mask_binary', 'edge_mask', 'mask_bindary_diff']
+        self.maskConf = maskConf
+        
+        if sum(maskConf) > 0:
+            print("Using masks {}".format(", ".join([name for i,name in enumerate(self.names) if maskConf[i]])))
+        else:
+            print("Use 3 class mask (background, cells, boundary between cells)")
+
+        if normalize:
+            print("Perform histogram equalization")
+            for i in range(len(data)):
+                sys.stdout.write("\r" + str(i))
+                data[i]['img'] = equalHist(data[i]['img'])
+       
+        self.datas = data
 
     def __getitem__(self, index):
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
-
     
         if self.augment == True:
             imgWidth = self.imgWidth
 
             # do cropping to imgWidth x imgWidth if *any* dimension is larger than imgWidth
             if np.any(np.asarray(img.shape[0:2]) > imgWidth):                
-                # print("Crop")
-                #plt.figure(1)
-                #plt.subplot(2,2,1)
-                #plt.imshow(img)
-                #plt.subplot(2,2,3)
-                #plt.imshow(mask.squeeze(axis=2))               
-
                 # crop 
                 xcoord = randint(0,img.shape[1] - imgWidth )
                 ycoord = randint(0,img.shape[0] - imgWidth )
@@ -155,13 +167,6 @@ class Dataset():
                     print(ycoord)
                     print(img.shape)
                     print("CROP ERROR")
-
-                #plt.figure(1)
-                #plt.subplot(2,2,2)
-                #plt.imshow(img)
-                #plt.subplot(2,2,4)
-                #plt.imshow(mask.squeeze(axis=2))               
-                #plt.show()
 
             p = 50
             # mirror - left/right
@@ -184,53 +189,27 @@ class Dataset():
                 # print("Transpose")
                 mask = np.transpose(mask, (1,0,2))
                 img = np.transpose(img, (1,0,2))
-
+            
             # rotate
-            # take care of discretization artifacts.
-
-        #tsfPIL = transforms.ToPILImage()
-        #img = tsfPIL(img)
-        #mask = tsfPIL(mask)
-        #try:
-        #if self.augment == True:
-        #    #except:
-        #    #    print(img.shape)
-        #    if np.any(np.asarray(img.shape[0:2]) != 256):
-        #        img = self.st_transform(img)
-        #        mask = self.st_transform(mask)
-        #        img  = img.resize((256,256))
-        #        mask = mask.resize((256,256)) 
-         
-        #plt.subplot(2,2,2)
-        #plt.imshow(img)
-        #plt.subplot(2,2,4)
-        #plt.imshow(mask.squeeze(axis=2))
-        #print(mask.shape)
-        #plt.show()
-        # else:
-        # reshape to 256x256
-
-            # Rotation
-            # rot  = randint(-20,20)
-            # img  = img.rotate(rot)
-            # mask = mask.rotate(rot, resample=PIL.Image.NEAREST)
-
-        # Class specific normalization  
-        # df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
-        # classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 
-        # rows, cols, dims = img.shape
-        # imgmean = np.mean(np.reshape(img,(rows*cols,dims)), axis=0) 
-        # c = np.argmin( np.sum((classmean - imgmean)**2, axis=1) )
-        # img = img - classmean[c,:]
-        # img.dtype = np.uint8
+    
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
-        # reassign labels
+        # reassign labels for filling holes that appeared during the cropping --> makes life easier in later functions
         mask_ = t.from_numpy(np.zeros_like(mask, dtype=np.float32))
         for i,idx in enumerate(np.unique(mask)):
             mask_[mask==int(idx)] = i
         mask = mask_
-        # if there is at least one label
+        mask_stacked = makeMask(mask, self.maskConf)
+
+        return img, mask_stacked, mask
+    
+    def __len__(self):
+        return len(self.datas)
+
+
+def makeMask(mask, maskConf):
+    if sum(maskConf) > 0:
+        # if there is at least one cell
         if mask.sum() > 0:
             # edge mask
             edge_mask = t.from_numpy(sobel(mask[0,:,:]/mask.max()).astype('float32')).unsqueeze(0) # sobel filter
@@ -242,19 +221,50 @@ class Dataset():
         mask_binary = mask.clone()
         mask_binary[mask > 0] = 1
         # substract edges from mask
-        #mask_binary = mask_binary - edge_mask
-        #mask_binary[mask_binary < 0] = 0
+        mask_binary_diff = mask_binary - edge_mask
+        mask_binary_diff[mask_binary < 0] = 0
         # stack resulting masks
-        mask_stacked = t.cat((mask_binary,edge_mask))
-        #mask_stacked = edge_mask
-        return img, mask_stacked, mask
-    def __len__(self):
-        return len(self.datas)
+        mask_stacked = eval("t.cat((" + ", ".join([name for i,name in enumerate(names) if maskConf[i]]) + "))")
+    else:
+        # three classes encoded as one-hot labels in three binary layers
+        mask = mask[0,:].numpy()
+        overlap = np.zeros_like(mask)
+        for idx in np.unique(mask):
+            if idx > 0:
+                overlap += dilation(mask==idx, square(3))
+
+        background = np.zeros_like(mask)
+        background[mask == 0] = 1
+        foreground = np.zeros_like(mask)
+        foreground[mask > 0] = 1
+        
+        # add weight layer
+        weight_dw = 1+1e-3-np.minimum(ndimage.distance_transform_edt(background)/15, 1) 
+        overlap[overlap == 1] = 0
+        # remove overlap from foreground mask
+        foreground[overlap == 1] = 0
+        background[overlap == 1] = 0
+        # add 1 to foreground class to prevent division by zero, since we have images without any cells
+        weight = (overlap/(np.sum(overlap)+500) + foreground/(np.sum(foreground)+1) + background/np.sum(background))*weight_dw
+        #weight = weight*np.prod(mask.shape)/np.sum(weight)
+        #ipdb.set_trace()
+
+        mask_stacked = t.from_numpy(np.stack((background, foreground, overlap, weight))).type(t.FloatTensor)
+
+    return mask_stacked
 
 
 class TestDataset():
-    def __init__(self,path,source_transform):
+    def __init__(self,path,source_transform,normalize):
         self.datas = t.load(path)
+        if normalize:
+            print("Perform histogram equalization")
+            for i in range(len(self.datas)):
+                sys.stdout.write("\r" + str(i))
+                self.datas[i]['img'] = equalHist(self.datas[i]['img'])
+	    
+            print("")	
+
         self.s_transform = source_transform
     def __getitem__(self, index):
         data = self.datas[index]
@@ -265,6 +275,12 @@ class TestDataset():
         return img, shape, name
     def __len__(self):
         return len(self.datas)
+
+
+def equalHist(img):
+    img = exposure.equalize_adapthist(img.numpy())
+    #img = denoise_tv_chambolle(img, weight=0.02, multichannel=False)
+    return t.from_numpy(img*255).type(t.ByteTensor)
 
 
 def createKSplits(l, K, random_state = 0):

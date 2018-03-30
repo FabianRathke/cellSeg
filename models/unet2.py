@@ -79,7 +79,7 @@ class outconv(nn.Module):
 
 
 class UNet2(nn.Module):
-    def __init__(self, n_channels, n_classes, learn_weights=False):
+    def __init__(self, n_channels, n_classes, learn_weights=False, softmax = False):
         super(UNet2, self).__init__()
         self.inc = inconv(n_channels, 64)
         self.down1 = down(64, 128)
@@ -96,6 +96,7 @@ class UNet2(nn.Module):
 
         self.up4 = up(128, out_ch, learn_weights)       
         self.outc = outconv(out_ch, n_classes)
+        self.softmax = softmax
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -108,7 +109,11 @@ class UNet2(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         x = self.outc(x)
-        x = t.nn.functional.sigmoid(x)
+        if self.softmax:
+            x = t.nn.functional.softmax(x)
+        else:
+            x = t.nn.functional.sigmoid(x)
+
         return x
 
 
