@@ -14,11 +14,18 @@ from skimage import exposure
 from skimage.filters import sobel
 from skimage.morphology import square, dilation
 from scipy import ndimage
+import skimage.measure as measure
 
 import util
 import pandas as pd
 from random import *
-import PIL 
+import PIL
+
+from skimage import exposure
+ 
+
+# from scipy import signal
+from scipy import ndimage
 
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
@@ -115,12 +122,17 @@ def process_split(file_path, clustermeans, cluster, has_mask=True):
     return datas
 
 
+
 def crop_nparray(img, xy):
     return img[xy[1]:xy[3], xy[0]:xy[2], :]
 
 
 class Dataset():
-    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, normalize=False, imgWidth=256, maskConf = [1, 0, 0]):
+    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0):
+        self.datas = data
+        self.useCentroid = use_centroid
+        self.hist_eq = histEq
+
         self.s_transform = source_transform
         self.t_transform = target_transform
  
@@ -130,7 +142,7 @@ class Dataset():
         if self.augment:
             self.st_transform = source_target_transform
 
-        self.names = ['mask_binary', 'edge_mask', 'mask_bindary_diff']
+        self.names = ['mask_binary', 'edge_mask', 'centroid_mask']
         self.maskConf = maskConf
         
         if sum(maskConf) > 0:
@@ -138,7 +150,7 @@ class Dataset():
         else:
             print("Use 3 class mask (background, cells, boundary between cells)")
 
-        if normalize:
+        if histEq:
             print("Perform histogram equalization")
             for i in range(len(data)):
                 sys.stdout.write("\r" + str(i))
@@ -150,7 +162,10 @@ class Dataset():
         data = self.datas[index]
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
-    
+
+#        if self.hist_eq:
+#            img = (exposure.equalize_adapthist(img, clip_limit=0.03)*255).astype(np.uint8)
+       
         if self.augment == True:
             imgWidth = self.imgWidth
 
@@ -169,13 +184,16 @@ class Dataset():
                     print("CROP ERROR")
 
             p = 50
+         
+            #if 0 <= raugment <= 33:
             # mirror - left/right
             rint = randint(0, 100)
             if p  > rint:
                 # print("Flip LR")
                 mask = np.fliplr(mask)
                 img  = np.fliplr(img)
-
+    
+            #elif 33 < raugment <= 66:
             # mirror - up/down
             rint = randint(0, 100)
             if p > rint:
@@ -183,15 +201,15 @@ class Dataset():
                 mask = np.flipud(mask)
                 img = np.flipud(img)
 
+            #elif 66 < raugment <= 100:
             # transpose
             rint = randint(0, 100)
             if p > rint:
                 # print("Transpose")
                 mask = np.transpose(mask, (1,0,2))
                 img = np.transpose(img, (1,0,2))
-            
+        
             # rotate
-    
         img = self.s_transform(img) 
         mask = self.t_transform(mask)*255
         # reassign labels for filling holes that appeared during the cropping --> makes life easier in later functions
@@ -214,15 +232,37 @@ def makeMask(mask, maskConf):
             # edge mask
             edge_mask = t.from_numpy(sobel(mask[0,:,:]/mask.max()).astype('float32')).unsqueeze(0) # sobel filter
             edge_mask[edge_mask > 0] = 1 # binarize
+
+            # centroids 
+            # print(mask)
+            if self.useCentroid:
+                centroid_mask = np.zeros((mask[0,:,:].shape)) #.squeeze(axis=2).shape)) 
+                rp = measure.regionprops(mask[0,:,:].numpy().astype(int)) #) # .squeeze(axis=2))
+                for props in rp:
+                    y0, x0 = props.centroid
+                    centroid_mask[np.int(y0), np.int(x0)] = 1
+
+                struct1 = ndimage.generate_binary_structure(2,1)
+                centroid_mask = ndimage.binary_dilation(centroid_mask, structure=struct1, iterations=3)*1
+                centroid_mask = t.from_numpy(centroid_mask).unsqueeze(0).float()
         else:
             edge_mask = mask.clone()
+            if self.useCentroid:
+                centroid_mask = mask.clone()
+
+        #plt.figure(1)
+        #plt.subplot(1,2,1)
+        #plt.imshow(centroid_mask)
+        #plt.subplot(1,2,2)
+        #plt.imshow(mask[0,:,:])               
+        #plt.show()
 
         # binary body mask
         mask_binary = mask.clone()
         mask_binary[mask > 0] = 1
         # substract edges from mask
-        mask_binary_diff = mask_binary - edge_mask
-        mask_binary_diff[mask_binary < 0] = 0
+        #mask_binary_diff = mask_binary - edge_mask
+        #mask_binary_diff[mask_binary < 0] = 0
         # stack resulting masks
         mask_stacked = eval("t.cat((" + ", ".join([name for i,name in enumerate(names) if maskConf[i]]) + "))")
     else:
@@ -253,6 +293,7 @@ def makeMask(mask, maskConf):
 
     return mask_stacked
 
+      
 
 class TestDataset():
     def __init__(self,path,source_transform,normalize):

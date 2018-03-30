@@ -13,7 +13,11 @@ from skimage import exposure
 import ipdb
 import os.path
 from skimage.measure import regionprops
+from skimage.morphology import binary_erosion
+
+
 from IPython import embed
+
 from models import *
 
 # ****** LOSS FUNCTION ******
@@ -27,15 +31,25 @@ def soft_dice_loss(inputs, targets):
     return score
 
 
-def soft_dice_loss2(inputs, targets):
-    ''' Loss function from from UnitBox:
-        https://arxiv.org/pdf/1608.01471.pdf '''
-    num = targets.size(0)
-    m1  = inputs.view(num,-1)
-    m2  = targets.view(num,-1)
-    intersection = (m1 * m2)
-    score = 2. * (intersection.sum(1)+1) / (m1.sum(1) + m2.sum(1) - intersection.sum(1) + 1)
-    score = - torch.log( score.sum() )
+def soft_dice_weighted_loss(inputs, targets):
+    # ipdb.set_trace()
+    num = targets.size(1)
+    
+    score_total = 0
+    for i in range(targets.size(0)):
+        class_sum = targets[i,:,:,:].sum(1).sum(1)
+        class_w = 1-class_sum/(class_sum.sum()+1)
+        class_w = class_w/(class_w.sum()+1)
+
+        m1 = inputs[i,:,:,:].view(num,-1)
+        m2 = targets[i,:,:,:].view(num,-1)
+        intersection = (m1 * m2)
+
+        score = 2. * (intersection.sum(1)+10**-10) / (m1.sum(1) + m2.sum(1)+10**-10)
+
+        score_total += (score*class_w).sum()
+     
+    score = 1 - score_total/targets.size(0)
     return score
 
 
@@ -103,7 +117,7 @@ def plotExampleTest(img, mask, pred, batch, fileSize, folder = 'plots'):
     plt.close()
 
 
-def competition_loss_func(inputs, targets = None):
+def competition_loss_func(inputs, targets = None, useCentroid=0):
     ''' https://www.kaggle.com/c/data-science-bowl-2018#evaluation
         evaluates IoU (intersection over union) for various thresholds and calculates
         TPs, FPs and FNs for all objects (detected vs. ground truth). The final score
@@ -125,49 +139,96 @@ def competition_loss_func(inputs, targets = None):
         bodies = inputs[0,:]
         bodies[bodies > 0.9] = 1 # threshold
         inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
+        
+        # ipdb.set_trace()
         unique, counts = np.unique(inputs, return_counts=True)
         radi = np.sqrt(np.median(counts[1:-1])/np.pi)
         # get average size of nuclei
-        
-        current_label = 1
-        corrected = np.zeros_like(inputs)
-        for k in unique[1:]:
-            label_k = (inputs == k).astype(int)
-            rprop = regionprops(label_k)
-            n_label_k = np.sum(label_k)
-            if n_label_k > 30: # filter all cells smaller than 30 pixel
-                n_hull = rprop[0].convex_area - n_label_k # size convex hull - actual predicted cell size 
-                
-                if n_hull/n_label_k > 0.2:
-                    # radi = np.sqrt((n_label_k)/np.pi)
-                    fprint = np.int(np.maximum(2*np.floor(radi/2)+1,3))
-                    distance = ndimage.distance_transform_edt(label_k)
-                    diff_connectivity = measure.label(label_k) # why not label_k ?? [Fabian]
-                    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((fprint,fprint)),
-                                        num_peaks_per_label=2, labels=diff_connectivity, )
-                    markers = ndimage.label(local_maxi)[0]
-                    label_k = morph.watershed(-distance, markers, mask=label_k)
 
-                unique, counts = np.unique(label_k, return_counts=True)
-                # print(unique)
-                for u in unique[np.arange(len(unique))!=0]:
-                    # corrected = corrected + (label_k == u).astype(int)*current_label
+        # convex hull        
+        if 1:
+            current_label = 1
+            corrected = np.zeros_like(inputs)
+            for k in unique[1:]:
+                label_k = (inputs == k).astype(int)
+                rprop = regionprops(label_k)
+                n_label_k = np.sum(label_k)
+                if n_label_k > 30:
+                    n_hull    = rprop[0].convex_area - n_label_k
+                    if n_hull/n_label_k > 0.2:
+                        # ipdb.set_trace()
+                        # radi = np.sqrt((n_label_k)/np.pi)
+                        fprint = np.int(np.maximum(2*np.floor(radi/2)+1,3))
+                        distance = ndimage.distance_transform_edt(label_k)
+                        diff_connectivity = measure.label(label_k)
+                        local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((fprint,fprint)),
+                                            num_peaks_per_label=2, labels=diff_connectivity, )
+                        markers = ndimage.label(local_maxi)[0]
+                        label_k = morph.watershed(-distance, markers, mask=label_k)
+
+                    unique, counts = np.unique(label_k, return_counts=True)
+                    # print(unique)
+                    for u in unique[np.arange(len(unique))!=0]:
+                        # corrected = corrected + (label_k == u).astype(int)*current_label
+                        corrected[label_k == u] = current_label
+                        #print(current_label)
+                        current_label += 1
+
+        if useCentroid:
+            # centroids 
+            c_mask = data_inputs[2,:]
+            c_mask[c_mask > 0.9] = 1
+            c_mask[c_mask < 0.9] = 0
+            c_mask = measure.label(c_mask)
+            centroid_mask = np.zeros((c_mask.shape))
+            rp = measure.regionprops(c_mask)
+            for props in rp:
+                y0, x0 = props.centroid
+                centroid_mask[np.int(y0), np.int(x0)] = 1
+
+
+            #plt.figure(2),
+            #plt.imshow(centroid_mask)
+            #plt.show()
+
+            # ipdb.set_trace()
+            current_label = 1
+            corrected = np.zeros_like(inputs)
+            for k in unique[1:]:
+                label_k = (inputs == k).astype(int)
+
+                seed_markers = label_k * centroid_mask
+                if seed_markers.sum() > 1:
+                    label_k = morph.watershed(-ndimage.distance_transform_edt(label_k), measure.label(seed_markers), mask=label_k)
+                    # print("split label")
+
+                unique_split, counts = np.unique(label_k, return_counts=True)
+                for u in unique_split[np.arange(len(unique_split))!=0]:
                     corrected[label_k == u] = current_label
-                    #print(current_label)
                     current_label += 1
 
-        # print(current_label)
-        if 0 and np.sum(inputs-corrected):
-            plt.figure(20),
-            plt.subplot(1,2,1)
-            plt.imshow(inputs), 
+            inputs = corrected
 
-            plt.subplot(1,2,2)
-            plt.imshow(inputs-corrected)
-            plt.show(block=False)
+            #plt.subplot(2,2,2)
+            #plt.imshow(corrected)
+            #plt.subplot(2,2,3)
+            #plt.imshow(data_inputs[2,:])
+            #plt.show()
             #ipdb.set_trace()
 
-        inputs = corrected
+            # print(current_label)
+            if 0 and np.sum(inputs-corrected):
+                plt.figure(20),
+                plt.subplot(1,2,1)
+                plt.imshow(inputs), 
+
+                plt.subplot(1,2,2)
+                plt.imshow(inputs-corrected)
+                plt.show(block=False)
+                #ipdb.set_trace()
+
+
+            inputs = corrected
     else:
         # multi-labels from binary input
         inputs = measure.label(inputs)
