@@ -15,6 +15,14 @@ import os.path
 from skimage.measure import regionprops
 from skimage.morphology import binary_erosion
 
+from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage.morphology import binary_erosion
+
+import torch as t
+from torchvision import transforms as tsf
+
+import PIL
+# from PIL import Image
 
 from IPython import embed
 
@@ -473,3 +481,149 @@ def train_model(model, optimizer, lossFunc, dataloader, validdataloader, args):
             #print('acc: %.3f, score: %.3f' % (acc, score))
 
     return model
+
+
+def evaluate_model_tiled(model, data_orig, block_size):
+  
+    batchn, dims, rows_orig, cols_orig = data_orig.shape
+
+    # if any dim is smaller than block_size -> reshape it
+    if np.any(np.array([rows_orig,cols_orig]) < block_size):
+        st_trans = tsf.Compose([
+                                tsf.ToPILImage(),
+                                tsf.Resize((np.maximum(rows_orig,block_size), np.maximum(cols_orig,block_size))),
+                                tsf.ToTensor()
+                                ])
+        data = st_trans( data_orig.squeeze().data.cpu() )
+        data = data.unsqueeze(0)
+        data = t.autograd.Variable(data,volatile=True).cuda()
+
+        # plt.figure(10), plt.imshow(data.squeeze().permute(1,2,0).data.cpu().numpy()), plt.show()
+    else:
+        data = data_orig            
+
+    batchn, dims, rows, cols = data.shape
+
+
+    N = rows*cols
+    idx = np.reshape(list(range(N)), (rows,cols))
+    
+    offset_rows = 1 if (rows % block_size == 0) else 0
+    offset_cols = 1 if (cols % block_size == 0) else 0
+    
+    row_seeds = np.linspace(block_size//2, rows-block_size//2, np.ceil(rows / block_size)+offset_rows + 1)
+    col_seeds = np.linspace(block_size//2, cols-block_size//2, np.ceil(cols / block_size)+offset_cols + 1)
+    
+    coord_seeds = [(row_seeds[i], col_seeds[j]) for i in range(len(row_seeds)) for j in range(len(col_seeds))]
+    coord_seeds = np.floor(coord_seeds)
+    coord_seeds = np.unique(coord_seeds,axis=0)
+ 
+    # 3 - number of classes    
+    img_fused = np.zeros((3,rows,cols))
+
+
+    block_w = block_size # base_block_w + overlapp_block_w # base shape + overlapp
+    for y,x in coord_seeds:
+        xx = list(map(int,[x - block_w//2, x+block_w//2 + block_w % 2]))
+        yy = list(map(int,[y - block_w//2, y+block_w//2 + block_w % 2]))
+        
+        # Left boundary
+        if xx[0] < 0:
+            xx[1] = np.minimum(xx[1]+np.abs(xx[0]),cols)
+            xx[0] = 0
+        
+        # Top boundary
+        if yy[0] < 0:
+            yy[1] = np.minimum(yy[1]+np.abs(yy[0]), rows)
+            yy[0] = 0
+
+		# Right boundary
+        if xx[1] >= cols:
+            xx[0] = np.maximum(cols - block_w,0)
+            xx[1] = cols
+        # Bottom boundary
+        if yy[1] >= rows:
+            yy[0] = np.maximum(rows - block_w,0)
+            yy[1] = rows
+
+        
+        # Crop data and index patch
+        patch = data[:,:,yy[0]:yy[1],xx[0]:xx[1]]
+        patch_idx = idx[yy[0]:yy[1],xx[0]:xx[1]]
+        patch_idx = np.ascontiguousarray(patch_idx)
+       
+        #ipdb.set_trace() 
+        #plt.figure(1), plt.imshow((patch.data.squeeze().permute(1,2,0).cpu().numpy()*0.5)+0.5), plt.show()
+
+        patch_idx.shape = (-1,)
+        
+		# Predict patch
+        output = model(patch).cpu()
+        
+        # Add to prediction result
+        fuse_mask = np.ones((rows,cols))
+        for i in range(output.shape[1]):          
+            out = output[:,i,:].squeeze().data.cpu().numpy()
+            out.shape = (-1,1)
+                                   
+            fused_i = np.zeros((rows,cols))
+            fused_i.shape = (-1,1)
+            fused_i[patch_idx] = out
+            fused_i.shape = (rows, cols)
+
+            fuse_mask_i = (fused_i != 0).astype(float)
+            fuse_mask = (img_fused[i,:] != 0).astype(float)
+
+            overlap = fuse_mask * fuse_mask_i
+            ax0 = overlap.sum(axis=0)
+            ax1 = overlap.sum(axis=1)
+            prune = 0
+            if (ax0.sum() + ax1.sum()) > 0:
+                min_overlap = np.minimum(np.min(ax0[ax0>0]), np.min(ax1[ax1>0]))
+                prune = np.int(min_overlap / 4)
+
+            if prune > 0:
+                fuse_mask_i_erroded = binary_erosion(fuse_mask_i, iterations=prune, border_value=1).astype(float)
+                fuse_mask_i_erroded = gaussian_filter(fuse_mask_i_erroded, sigma=2, mode='reflect')
+
+                fuse_mask_erroded = binary_erosion(fuse_mask, iterations=prune, border_value=1).astype(float)
+                fuse_mask_erroded = gaussian_filter(fuse_mask_erroded, sigma=2, mode='reflect')
+            else:
+                fuse_mask_i_erroded = fuse_mask_i
+                fuse_mask_erroded = fuse_mask 
+
+            # ipdb.set_trace()
+            img_fused[i,:] = np.maximum(img_fused[i,:] * fuse_mask_erroded, fused_i * fuse_mask_i_erroded)
+
+            # plt.figure(2), plt.imshow(img_fused[i,:]), plt.show()
+
+    # Resize the image to its original size
+    img_fused.shape = (img_fused.shape[0],rows,cols)
+    result = np.zeros((img_fused.shape[0], rows_orig, cols_orig))
+    if np.any(np.array([rows_orig,cols_orig]) < block_size):
+   
+        # ipdb.set_trace()
+        for i in range(img_fused.shape[0]):
+            pil_img = PIL.Image.fromarray(img_fused[i,:,:])
+            pil_img = pil_img.resize((cols_orig,rows_orig),PIL.Image.BILINEAR)
+            result[i,:,:] = np.array(pil_img)
+
+        # plt.figure(10), plt.imshow(data.squeeze().permute(1,2,0).data.cpu().numpy()), plt.show()
+    else:
+        result = img_fused    
+
+    # threshold for binarization
+    result[result > 0.9] = 1
+    result[result <= 0.9] = 0
+
+    if 1:     
+        plt.figure(2),
+        plt.subplot(2,2,1)
+        plt.imshow(result[0,:,:])
+        plt.subplot(2,2,2)
+        plt.imshow(result[1,:,:])
+        plt.subplot(2,2,3)
+        plt.imshow(result[2,:,:])
+        plt.show()    
+  
+    return result

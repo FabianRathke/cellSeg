@@ -170,7 +170,7 @@ if  __name__ == "__main__":
     args = parser.parse_args()
     args.iterPrint = 5
     args.iterPlot = 20
-    args.numEpochs = 100
+    args.numEpochs = 50
     args.learnWeights = True
     args.dataAugm = True
     args.imgWidth = 256
@@ -210,12 +210,18 @@ if  __name__ == "__main__":
 
         s_trans, t_trans, st_trans = norm_trans(args.dataAugm)    
 
-        dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
+        dataset = loadData.Dataset(train_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf = [1, 0, 0], use_centroid=args.useCentroid)
+        
+        
+        # st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
         dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
         # ipdb.set_trace()
 
-        validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
+        # source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf = [1, 0, 0], use_centroid=args.useCentroid)
+        validset = loadData.Dataset(val_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf = [1, 0, 0], use_centroid=args.useCentroid)
+        
+        # st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
         validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)  
 
         # ***** SET MODEL *****
@@ -224,7 +230,7 @@ if  __name__ == "__main__":
         if args.useCentroid:
             model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementation
         else:
-            model = UNet2(3,2,learn_weights=args.learnWeights) # Kaggle notebook implementation
+            model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementation
 
         model = nn.DataParallel(model).cuda()
 

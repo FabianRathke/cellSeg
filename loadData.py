@@ -217,7 +217,7 @@ class Dataset():
         for i,idx in enumerate(np.unique(mask)):
             mask_[mask==int(idx)] = i
         mask = mask_
-        mask_stacked = makeMask(mask, self.maskConf)
+        mask_stacked = makeMask(mask, self.maskConf, self.names)
 
         return img, mask_stacked, mask
     
@@ -225,7 +225,7 @@ class Dataset():
         return len(self.datas)
 
 
-def makeMask(mask, maskConf):
+def makeMask(mask, maskConf, names, useCentroid=False):
     if sum(maskConf) > 0:
         # if there is at least one cell
         if mask.sum() > 0:
@@ -235,7 +235,7 @@ def makeMask(mask, maskConf):
 
             # centroids 
             # print(mask)
-            if self.useCentroid:
+            if useCentroid:
                 centroid_mask = np.zeros((mask[0,:,:].shape)) #.squeeze(axis=2).shape)) 
                 rp = measure.regionprops(mask[0,:,:].numpy().astype(int)) #) # .squeeze(axis=2))
                 for props in rp:
@@ -247,7 +247,7 @@ def makeMask(mask, maskConf):
                 centroid_mask = t.from_numpy(centroid_mask).unsqueeze(0).float()
         else:
             edge_mask = mask.clone()
-            if self.useCentroid:
+            if useCentroid:
                 centroid_mask = mask.clone()
 
         #plt.figure(1)
