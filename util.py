@@ -612,10 +612,6 @@ def evaluate_model_tiled(model, data_orig, block_size):
     else:
         result = img_fused    
 
-    # threshold for binarization
-    result[result > 0.9] = 1
-    result[result <= 0.9] = 0
-
     if 0:     
         plt.figure(2),
         plt.subplot(2,2,1)
