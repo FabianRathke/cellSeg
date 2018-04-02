@@ -147,7 +147,7 @@ class Dataset():
         self.maskConf = maskConf
         
         if sum(maskConf) > 0:
-            print("Using masks {}".format(", ".join([name for i,name in enumerate(self.names) if maskConf[i]])))
+            print("Using masks: {}".format(", ".join([name for i,name in enumerate(self.names) if maskConf[i]])))
         else:
             print("Use 3 class mask (background, cells, boundary between cells)")
 
