@@ -170,7 +170,7 @@ if  __name__ == "__main__":
     args = parser.parse_args()
     args.iterPrint = 5
     args.iterPlot = 20
-    args.numEpochs = 50
+    args.numEpochs = 60
     args.learnWeights = True
     args.dataAugm = True
     args.imgWidth = 256
@@ -209,28 +209,24 @@ if  __name__ == "__main__":
         train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 
         s_trans, t_trans, st_trans = norm_trans(args.dataAugm)    
-
-        dataset = loadData.Dataset(train_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf = [1, 0, 0], use_centroid=args.useCentroid)
         
-        
-        # st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
+        maskConf = [1,1,0]
+        # dataset = loadData.Dataset(train_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, imgWidth=args.imgWidth, maskConf=maskConf)
+        dataset = loadData.Dataset(train_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf=maskConf, use_centroid=args.useCentroid)
         dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
-        # ipdb.set_trace()
-
-        # source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf = [1, 0, 0], use_centroid=args.useCentroid)
-        validset = loadData.Dataset(val_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf = [1, 0, 0], use_centroid=args.useCentroid)
+    
+        #validset = loadData.Dataset(val_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, imgWidth=args.imgWidth, maskConf=maskConf)
+        validset = loadData.Dataset(val_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf=maskConf, use_centroid=args.useCentroid)
+       
         
         # st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
         validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)  
 
         # ***** SET MODEL *****
         # model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-
-        if args.useCentroid:
-            model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementation
-        else:
-            model = UNet2(3,3,learn_weights=args.learnWeights) # Kaggle notebook implementation
+        # ipdb.set_trace()
+        model = UNet2(3,2,learn_weights=args.learnWeights, softmax=False) # Kaggle notebook implementation
 
         model = nn.DataParallel(model).cuda()
 
@@ -239,38 +235,13 @@ if  __name__ == "__main__":
         lossFunc = util.soft_dice_loss
         # lossFunc = util.soft_dice_weighted_loss
 
-        model = train_model(model, lossFunc, args.numEpochs)
+        # model = train_model(model, lossFunc, args.numEpochs)
+        model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
 
         util.save_model(model,args.modelName) 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+##############################################################################################################
 
 #util.plot_results_for_images(model,dataloader)
 

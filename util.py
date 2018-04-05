@@ -21,6 +21,8 @@ from scipy.ndimage.morphology import binary_erosion
 import torch as t
 from torchvision import transforms as tsf
 
+from skimage.transform import resize
+
 import PIL
 # from PIL import Image
 
@@ -483,22 +485,37 @@ def train_model(model, optimizer, lossFunc, dataloader, validdataloader, args):
     return model
 
 
-def evaluate_model_tiled(model, data_orig, block_size):
+def evaluate_model_tiled(model, data_orig, outClasses, block_size):
   
     batchn, dims, rows_orig, cols_orig = data_orig.shape
 
     # if any dim is smaller than block_size -> reshape it
     if np.any(np.array([rows_orig,cols_orig]) < block_size):
-        st_trans = tsf.Compose([
-                                tsf.ToPILImage(),
-                                tsf.Resize((np.maximum(rows_orig,block_size), np.maximum(cols_orig,block_size))),
-                                tsf.ToTensor()
-                                ])
-        data = st_trans( data_orig.squeeze().data.cpu() )
-        data = data.unsqueeze(0)
-        data = t.autograd.Variable(data,volatile=True).cuda()
+        #st_trans = tsf.Compose([
+        #                        tsf.ToPILImage(),
+        #                        tsf.Resize((np.maximum(rows_orig,block_size), np.maximum(cols_orig,block_size))),
+        #                        #tsf.Resize((block_size, block_size),PIL.Image.BILINEAR),
+        #                        tsf.ToTensor()
+        #                        ])
+        #data = st_trans( data_orig.squeeze().data.cpu()*0.5+0.5 )
+        #data = data.unsqueeze(0)/0.5-0.5
+        #data = t.autograd.Variable(data,volatile=True).cuda()
 
-        # plt.figure(10), plt.imshow(data.squeeze().permute(1,2,0).data.cpu().numpy()), plt.show()
+        #ipdb.set_trace()
+        data_resized = resize(np.array(data_orig[0].permute(1,2,0).squeeze().data.cpu())*0.5+0.5, (block_size, block_size),  mode='constant', preserve_range=True)
+        data_resized = t.autograd.Variable(t.FloatTensor(data_resized), volatile=True).cuda()
+        data_resized = data_resized.permute(2,0,1)
+        data = (data_resized.unsqueeze(0)-0.5)/0.5
+
+        #ipdb.set_trace()
+
+        #pil_img = PIL.Image.fromarray(data_orig.squeeze().data.cpu())
+        #pil_img = pil_img.resize((cols_orig,rows_orig),PIL.Image.BILINEAR)
+        #data = pil_img.unsqueeze(0)
+        #data = t.autograd.Variable(data,volatile=True).cuda()
+        
+		#plt.figure(10), plt.imshow((data_orig.squeeze().permute(1,2,0).data.cpu().numpy()*0.5)+0.5), plt.show()
+        #plt.figure(10), plt.imshow(data.squeeze().permute(1,2,0).data.cpu().numpy()), plt.show()
     else:
         data = data_orig            
 
@@ -518,8 +535,8 @@ def evaluate_model_tiled(model, data_orig, block_size):
     coord_seeds = np.floor(coord_seeds)
     coord_seeds = np.unique(coord_seeds,axis=0)
  
-    # 3 - number of classes    
-    img_fused = np.zeros((3,rows,cols))
+    # output variable    
+    img_fused = np.zeros((outClasses,rows,cols))
 
 
     block_w = block_size # base_block_w + overlapp_block_w # base shape + overlapp
@@ -597,16 +614,20 @@ def evaluate_model_tiled(model, data_orig, block_size):
 
             # plt.figure(2), plt.imshow(img_fused[i,:]), plt.show()
 
-    # Resize the image to its original size
+    # Resize the image to its original size if needed
     img_fused.shape = (img_fused.shape[0],rows,cols)
     result = np.zeros((img_fused.shape[0], rows_orig, cols_orig))
     if np.any(np.array([rows_orig,cols_orig]) < block_size):
    
         # ipdb.set_trace()
         for i in range(img_fused.shape[0]):
-            pil_img = PIL.Image.fromarray(img_fused[i,:,:])
-            pil_img = pil_img.resize((cols_orig,rows_orig),PIL.Image.BILINEAR)
-            result[i,:,:] = np.array(pil_img)
+            #  ipdb.set_trace()
+
+            result[i,:,:] = resize(img_fused[i,:,:], (rows_orig, cols_orig),  mode='constant', preserve_range=True)
+
+            #pil_img = PIL.Image.fromarray(img_fused[i,:,:])
+            #pil_img = pil_img.resize((cols_orig,rows_orig),PIL.Image.BILINEAR)
+            #result[i,:,:] = np.array(pil_img)
 
         # plt.figure(10), plt.imshow(data.squeeze().permute(1,2,0).data.cpu().numpy()), plt.show()
     else:
@@ -618,8 +639,12 @@ def evaluate_model_tiled(model, data_orig, block_size):
         plt.imshow(result[0,:,:])
         plt.subplot(2,2,2)
         plt.imshow(result[1,:,:])
-        plt.subplot(2,2,3)
-        plt.imshow(result[2,:,:])
-        plt.show()    
-  
+        #plt.subplot(2,2,3)
+        #plt.imshow(result[2,:,:])
+        plt.show()
+        
+    # ipdb.set_trace()
+
+    result = np.expand_dims(result, axis=0)
+ 
     return result

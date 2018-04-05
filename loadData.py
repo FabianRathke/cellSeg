@@ -23,7 +23,6 @@ import PIL
 
 from skimage import exposure
 from skimage.measure import regionprops
- 
 
 # from scipy import signal
 from scipy import ndimage
@@ -129,7 +128,7 @@ def crop_nparray(img, xy):
 
 
 class Dataset():
-    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0, scaleEq=True):
+    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0, scaleEq=False):
         self.datas = data
         self.useCentroid = use_centroid
         self.hist_eq = histEq
