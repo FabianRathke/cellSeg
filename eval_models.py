@@ -19,6 +19,7 @@ from torchvision import transforms as tsf
 from models import *
 import loadData
 import util
+import post_processing
 
 imp.reload(util)
 imp.reload(loadData)
@@ -55,7 +56,7 @@ def write_csv(results, results_splits, images, test_ids, folder):
     print("Encoding and plotting")
     for i,item in enumerate(results):
         sys.stdout.write("\r" + str(i))
-        output_t = item[0].data.numpy()#.astype(np.int8)
+        output_t = item[0].data.numpy().copy()#.astype(np.int8)
         #output_t[0,output_t[0,:]<0.9] = 0 # filter bodies differently from cell masks
         #output_t[1,output_t[1,:]<0.5] = 0 # filter bodies differently from cell masks
         output_t[output_t < 0.5] = 0
@@ -66,7 +67,7 @@ def write_csv(results, results_splits, images, test_ids, folder):
         preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
         preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
         if len(results_splits) == len(results):
-            data = results_splits[i][0].cpu().data.numpy()
+            data = results_splits[i][0].cpu().data.numpy().copy()
             #output_t = (results_splits[i][0] > 0.5).data.numpy().astype(np.int8) # old approach with one model having smaller cell bodies (model 5)
             output_t = data.argmax(axis=0)
             output_t[output_t == 1] = 0
@@ -76,8 +77,20 @@ def write_csv(results, results_splits, images, test_ids, folder):
        
         # predict labels
         labels = util.competition_loss_func(preds_test_upsampled)
+        
+        # ############# POST PROCESSING ################
+        labels_filled = post_processing.fill_holes(labels)
+        if np.sum(labels != labels_filled) > 0:
+            print("Filled holes for scan {}".format(i))
+            #plt.figure()
+            #plt.subplot(121); plt.imshow(labels); plt.subplot(122); plt.imshow(labels_filled); plt.show(block=False)
+            labels = labels_filled
+
+
+        # ############ PLOTTING ################
         util.plotExampleTest(images[i][0,:], item[0].data.cpu(), labels,  i, item[1][0], folder)
 
+        # ############### WRITE TO CSV ############
         rle = list(util.prob_to_rles(labels))
         rles.extend(rle)
         new_test_ids.extend([test_ids[i]] * len(rle))
@@ -85,14 +98,18 @@ def write_csv(results, results_splits, images, test_ids, folder):
     print("")
     return new_test_ids, rles
 
-def make_predictions(model, testdataloader):
+def make_predictions(model, testdataloader, testAugm):
     inputs_ = []; results = []
     test_ids = []
     print("Make predictions")
     for i, data in enumerate(testdataloader):
         sys.stdout.write("\r" + str(i))
         inputs, shape, name = data
-        output = model(t.autograd.Variable(inputs, volatile=True).cuda())
+        if sum(testAugm) > 0:
+            output = t.autograd.Variable(util.eval_augmentation(model, inputs, testAugm))
+        else:
+            output = model(t.autograd.Variable(inputs, volatile=True).cuda())
+
         results.append((output.cpu().squeeze(),shape))
         inputs_.append(inputs)
         test_ids.append(name[0])
@@ -113,14 +130,14 @@ for runClass in range(1):
     model = model.module.eval()
     model.softmax = False
     
-    inputs_, results, test_ids = make_predictions(model, testdataloader)
+    inputs_, results, test_ids = make_predictions(model, testdataloader, [1,1,1,1])
     
     # make predictions for all test samples
     if len(numModel) > 1:
         print("Load model {}".format('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt'))
         model = util.load_model('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt')
         model = model.module.eval()
-        _, results_splits, _ = make_predictions(model, testdataloader)
+        _, results_splits, _ = make_predictions(model, testdataloader, [0,0,0,0])
         results_splits
     else:
         results_splits = []
