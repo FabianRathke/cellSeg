@@ -650,3 +650,70 @@ def evaluate_model_tiled(model, data_orig, outClasses, block_size):
     result = np.expand_dims(result, axis=0)
  
     return result
+
+
+
+
+def eval_augmentation(model, inputs, testAugm=[1, 0, 0, 0]):
+    ''' 
+        testAugm = [normal, transpose, flip ud, flip lr]
+
+		Return average response of all augmentations.
+    '''    
+
+    results_augm = []
+    # normal
+    if testAugm[0] == 1:
+        x_test = t.autograd.Variable(inputs, volatile=True).cuda()
+        output1 = model(x_test)
+        results_augm.append(output1)
+
+    # transpose
+    if testAugm[1] == 1:
+        imT = inputs.transpose(2,3)
+        imT_x = t.autograd.Variable(imT, volatile=True).cuda()
+        output2 = model(imT_x)
+        output2 = output2.transpose(2,3)
+        results_augm.append(output2)
+  
+    # flip up
+    if testAugm[2] == 1:
+        imgLR = inputs.clone()
+        for i in range(imgLR.shape[1]):
+            imgLR[0,i,:,:] = t.from_numpy(np.flipud(imgLR[0,i,:,:].cpu().numpy()).copy())
+        imgLR_x = t.autograd.Variable(imgLR, volatile=True).cuda()
+        output3 = model(imgLR_x)
+        for i in range(output3.shape[1]):
+            output3[0,i,:,:] = t.from_numpy(np.flipud(output3[0,i,:,:].cpu().data.numpy()).copy()).cuda()
+        results_augm.append(output3)
+
+	# flip lr
+    if testAugm[3] == 1:
+        imgLR = inputs.clone()
+        for i in range(imgLR.shape[1]):
+            imgLR[0,i,:,:] = t.from_numpy(np.fliplr(imgLR[0,i,:,:].cpu().numpy()).copy())
+        imgLR_x = t.autograd.Variable(imgLR, volatile=True).cuda()
+        output3 = model(imgLR_x)
+        for i in range(output3.shape[1]):
+            output3[0,i,:,:] = t.from_numpy(np.fliplr(output3[0,i,:,:].cpu().data.numpy()).copy()).cuda()
+        results_augm.append(output3)
+
+    out = np.zeros(results_augm[0].shape)
+    for item in results_augm:
+        out = out + item.cpu().data.numpy()
+    out /= len(results_augm)
+
+    out = t.FloatTensor(out).cuda()
+
+    if 0:
+        plt.figure(1),
+        plt.subplot(2,2,1)
+        plt.imshow(out[0,0,:,:].cpu())
+        plt.subplot(2,2,2)
+        plt.imshow(out[0,1,:,:].cpu())
+        #plt.subplot(2,2,3)
+        #plt.imshow(output1[0,0,:,:].cpu() - output2[0,0,:,:].cpu())
+        plt.show()
+
+    return out
+

@@ -36,7 +36,7 @@ normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
 
 test_trans = tsf.Compose([
     tsf.ToPILImage(),
-    # tsf.Resize((256,256)),
+    tsf.Resize((256,256)),
     tsf.ToTensor(),
     normalize
 ])    
@@ -60,6 +60,12 @@ testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 model_cl0 = model_cl0.eval()
 model_cl1 = model_cl1.eval()
 results = []
+
+x_test_augm = []
+results_augm = []
+
+testAugm = [1,1,1,1] # normal, transpose, flip ud, flip lr 
+
 test_ids = []
 for i, data in enumerate(testdataloader):
     print(i)
@@ -74,8 +80,10 @@ for i, data in enumerate(testdataloader):
     for k in range(classmeans.shape[0]):
         cdist[k] = np.sum((classmeans[k,:] - imgmean[0:3])**2)
         
+   
 
-    # ipdb.set_trace()    
+
+    # ipdb.set_trace()
     c = np.int( np.argmin(cdist) )
     if c == 0:
         print("Class 0")
@@ -90,15 +98,16 @@ for i, data in enumerate(testdataloader):
             
         #img = (img-0.5)/0.5
         #x_test[0,:] = t.from_numpy(img).type(torch.FloatTensor).permute(2,0,1).cuda()
-        
+        output = util.eval_augmentation(model_cl0, inputs, testAugm)
         # output = model_cl0(x_test)
-        output = util.evaluate_model_tiled(model_cl0, x_test, outClasses, 256)
+        # output = util.evaluate_model_tiled(model_cl0, x_test, outClasses, 256)
         # ipdb.set_trace()
 
     else:
         # continue
-        output = util.evaluate_model_tiled(model_cl1, x_test, outClasses, 256)
+        # output = util.evaluate_model_tiled(model_cl1, x_test, outClasses, 256)
         # output = model_cl1(x_test)
+        output = util.eval_augmentation(model_cl1, inputs, testAugm)
   
     #ipdb.set_trace() 
 
@@ -110,7 +119,7 @@ for i, data in enumerate(testdataloader):
     #util.plotExample(inputs[idx,:], output[idx,0,:,:].data, output[idx,0,:,:].data, 0, 0, 0, 0, True)
     
     #ipdb.set_trace()
-    if 1:
+    if 0:
         plt.figure(1)
         plt.subplot(2,2,1)
         plt.imshow(inputs[0,:].cpu().permute(1,2,0).numpy()*0.5 + 0.5)
@@ -151,10 +160,10 @@ if 1:
     for i,item in enumerate(results):
         print(i)
      
-        #ipdb.set_trace() 
+        # ipdb.set_trace() 
         #preds_test_upsampled = (item[0][0] > 0.5).astype(np.uint8)
 
-        output_t = (item[0][0] > 0.5).data.cpu().numpy().astype(np.uint8)
+        output_t = (item[0][0] > 0.5).cpu().numpy().astype(np.uint8) # .data.cpu().numpy().astype(np.uint8)
         preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
         preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
 
