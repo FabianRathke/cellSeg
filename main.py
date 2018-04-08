@@ -166,6 +166,7 @@ if  __name__ == "__main__":
     parser.add_argument("--gpu", help="select gpu(s)")
     parser.add_argument("--cls", help="select class")
     parser.add_argument("--heq", type=str2bool, help="adaptive histogram equalization")
+    parser.add_argument("--cielab", type=str2bool, help="rgb to cielab")
 
     args = parser.parse_args()
     args.iterPrint = 5
@@ -183,7 +184,10 @@ if  __name__ == "__main__":
         args.heq = False
 
     if not args.cls:
-        args.cls = [0, 1]
+        args.cls = [1]
+
+    if not args.cielab:
+        args.cielab = False
 
     print("Training class " + ', '.join(map(str, args.cls)))
     print(args.heq)
@@ -212,12 +216,12 @@ if  __name__ == "__main__":
         
         maskConf = [1,1,0]
         # dataset = loadData.Dataset(train_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, imgWidth=args.imgWidth, maskConf=maskConf)
-        dataset = loadData.Dataset(train_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf=maskConf, use_centroid=args.useCentroid)
+        dataset = loadData.Dataset(train_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf=maskConf, use_centroid=args.useCentroid, cielab=args.cielab)
         dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
     
         #validset = loadData.Dataset(val_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, imgWidth=args.imgWidth, maskConf=maskConf)
-        validset = loadData.Dataset(val_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf=maskConf, use_centroid=args.useCentroid)
+        validset = loadData.Dataset(val_data, s_trans, t_trans, source_target_transform=st_trans, augment=args.dataAugm, histEq=args.heq, imgWidth=args.imgWidth, maskConf=maskConf, use_centroid=args.useCentroid, cielab=args.cielab)
        
         
         # st_trans, args.dataAugm, args.imgWidth, args.useCentroid, args.heq)
