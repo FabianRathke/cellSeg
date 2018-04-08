@@ -36,13 +36,13 @@ normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
 
 test_trans = tsf.Compose([
     tsf.ToPILImage(),
-    #tsf.Resize((256,256)),
+    # tsf.Resize((256,256)),
     tsf.ToTensor(),
     normalize
 ])    
 
 
-# os.environ['CUDA_VISIBLE_DEVICES'] = 3 # 0,1,2,3,4
+# os.environ['CUDA_VISIBLE_DEVICES'] = '2' # 0,1,2,3,4
 
 df = pd.read_csv('class_means_norm.csv', sep=',',header=None, index_col=False)
 classmeans = np.genfromtxt('class_means_norm.csv', delimiter=',')[1:,1:]
@@ -75,7 +75,7 @@ for i, data in enumerate(testdataloader):
         cdist[k] = np.sum((classmeans[k,:] - imgmean[0:3])**2)
         
 
-    #ipdb.set_trace()    
+    # ipdb.set_trace()    
     c = np.int( np.argmin(cdist) )
     if c == 0:
         print("Class 0")
@@ -152,11 +152,11 @@ if 1:
         print(i)
      
         #ipdb.set_trace() 
-        preds_test_upsampled = (item[0][0] > 0.5).astype(np.uint8)
+        #preds_test_upsampled = (item[0][0] > 0.5).astype(np.uint8)
 
-        #output_t = (item[0][0] > 0.5).data.cpu().numpy().astype(np.uint8)
-        #preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
-        #preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
+        output_t = (item[0][0] > 0.5).data.cpu().numpy().astype(np.uint8)
+        preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
+        preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
 
         #preds_test_upsampled = np.stack((resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True),
         #                                resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True),
@@ -164,6 +164,7 @@ if 1:
         
         # plt.figure(20), plt.subplot(1,2,1), plt.imshow(preds_test_upsampled[0,:,:]), plt.subplot(1,2,2), plt.imshow(preds_test_upsampled[1,:,:]), plt.show()
         
+        print(preds_test_upsampled.shape)
         labels = util.competition_loss_func(preds_test_upsampled,useCentroid=useCentroid)
 
         # ipdb.set_trace()

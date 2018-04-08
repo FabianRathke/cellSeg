@@ -502,7 +502,9 @@ def evaluate_model_tiled(model, data_orig, outClasses, block_size):
         #data = t.autograd.Variable(data,volatile=True).cuda()
 
         #ipdb.set_trace()
-        data_resized = resize(np.array(data_orig[0].permute(1,2,0).squeeze().data.cpu())*0.5+0.5, (block_size, block_size),  mode='constant', preserve_range=True)
+        rs_rows = np.maximum(rows_orig,block_size)
+        rs_cols = np.maximum(cols_orig,block_size)
+        data_resized = resize(np.array(data_orig[0].permute(1,2,0).squeeze().data.cpu())*0.5+0.5, (rs_rows, rs_cols),  mode='constant', preserve_range=True)
         data_resized = t.autograd.Variable(t.FloatTensor(data_resized), volatile=True).cuda()
         data_resized = data_resized.permute(2,0,1)
         data = (data_resized.unsqueeze(0)-0.5)/0.5
@@ -601,10 +603,10 @@ def evaluate_model_tiled(model, data_orig, outClasses, block_size):
 
             if prune > 0:
                 fuse_mask_i_erroded = binary_erosion(fuse_mask_i, iterations=prune, border_value=1).astype(float)
-                fuse_mask_i_erroded = gaussian_filter(fuse_mask_i_erroded, sigma=2, mode='reflect')
+                fuse_mask_i_erroded = gaussian_filter(fuse_mask_i_erroded, sigma=0.1, mode='reflect')
 
                 fuse_mask_erroded = binary_erosion(fuse_mask, iterations=prune, border_value=1).astype(float)
-                fuse_mask_erroded = gaussian_filter(fuse_mask_erroded, sigma=2, mode='reflect')
+                fuse_mask_erroded = gaussian_filter(fuse_mask_erroded, sigma=0.1, mode='reflect')
             else:
                 fuse_mask_i_erroded = fuse_mask_i
                 fuse_mask_erroded = fuse_mask 
