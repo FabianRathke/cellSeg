@@ -43,7 +43,7 @@ if args.dataAugm:
     s_trans = tsf.Compose([
         # tsf.CenterCrop(256)
         tsf.ToPILImage(),
-        tsf.Resize((args.imgWidth,args.imgWidth), interpolation=PIL.Image.NEAREST), # 382
+        tsf.Resize((args.imgWidth,args.imgWidth), interpolation=PIL.Image.BILINEAR), # 382
         tsf.ToTensor(),
         normalize,
     ])

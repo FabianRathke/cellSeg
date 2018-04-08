@@ -35,7 +35,7 @@ args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
 args.normalize = True
-numModel = [4,7]
+numModel = [2,3]
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '2,3' # 0,1,2,3,4
 print("Using gpus {}.".format(os.environ['CUDA_VISIBLE_DEVICES']))
@@ -141,7 +141,8 @@ for runClass in range(1):
         results_splits
     else:
         results_splits = []
-    
+   
+    # ipdb.set_trace() 
     # upsample and encode
     new_test_ids, rles = write_csv(results, results_splits, inputs_, test_ids, 'plots/testset-hist-' + str(runClass))
 

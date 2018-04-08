@@ -27,6 +27,9 @@ from skimage.measure import regionprops
 # from scipy import signal
 from scipy import ndimage
 
+from skimage.color import rgb2lab
+
+
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
     files = sorted(list(Path(file_path).iterdir()))
@@ -128,7 +131,7 @@ def crop_nparray(img, xy):
 
 
 class Dataset():
-    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0, scaleEq=False):
+    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0, scaleEq=False, cielab=False):
         self.datas = data
         self.useCentroid = use_centroid
         self.hist_eq = histEq
@@ -156,7 +159,20 @@ class Dataset():
                 sys.stdout.write("\r" + str(i))
                 data[i]['img'] = equalHist(data[i]['img'])
             sys.stdout.write("\n")
-             
+       
+        if cielab:    
+            print("Perform color space conversion")
+            for i in range(len(data)):           
+                sys.stdout.write("\r" + str(i))
+                data[i]['img'] = colorspaceConversion(data[i]['img'])
+                sys.stdout.write("\n")
+
+                #d2 = rgb2lab(data[i]['img'])
+                # remapp to 8-bit
+                #d2[:,:,0] = d2[:,:,0]*(255/100)
+                #data[i]['img'] = t.ByteTensor(d2 + [0,128,128])
+                    
+                                                                  
         if scaleEq and len(data) > 0:
             #ipdb.set_trace()
             print("Perform cell size normalization")            
@@ -333,7 +349,7 @@ def makeMask(mask, maskConf, names, useCentroid=False):
       
 
 class TestDataset():
-    def __init__(self,path,source_transform,normalize):
+    def __init__(self,path,source_transform,normalize,cielab):
         self.datas = t.load(path)
         if normalize:
             print("Perform histogram equalization")
@@ -342,6 +358,26 @@ class TestDataset():
                 self.datas[i]['img'] = equalHist(self.datas[i]['img'])
 	    
             print("")	
+
+        if cielab:
+            print("Perform RGB to CIELAB conversion")
+            for i in range(len(self.datas)):  
+                sys.stdout.write("\r" + str(i))
+                self.datas[i]['img'] = colorspaceConversion(self.datas[i]['img'])
+                sys.stdout.write("\n")
+
+                # d2 = rgb2lab(data[i]['img'])
+                # d2 = rgb2lab(self.datas[i]['img'])
+                # d2[:,:,0] = d2[:,:,0]*(255/100)
+                # self.datas[i]['img'] = t.ByteTensor(d2 + [0,128,128])
+
+            # plt.figure(1)
+            # plt.subplot(1,2,1)
+            # plt.imshow(self.datas[0]['img'][:,:,0])
+            # plt.subplot(1,2,2)
+            # plt.imshow(img2[:,:,0])
+            # plt.show()
+
 
         self.s_transform = source_transform
     def __getitem__(self, index):
@@ -360,6 +396,12 @@ def equalHist(img):
     #img = denoise_tv_chambolle(img, weight=0.02, multichannel=False)
     return t.from_numpy(img*255).type(t.ByteTensor)
 
+def colorspaceConversion(img):
+    ''' Convert from RGB to CIELAB colorspace '''
+        
+    img = rgb2lab(img)
+    img[:,:,0] = img[:,:,0]*(255/100)
+    return t.ByteTensor(img + [0,128,128])
 
 def createKSplits(l, K, random_state = 0):
     ''' createKSplits(l, K): returns a list with K entries, each holding a list of indices that constitute one splits. l is the number of data points '''

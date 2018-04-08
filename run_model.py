@@ -24,12 +24,12 @@ from skimage import exposure
 useCentroid = 0
 submissionName = 'sub-dsbowl2018-cl0-0'
 
-model_cl0 = util.load_model('model-cl0-1.pt')
-model_cl1 = util.load_model('model-cl1-2.pt')
+model_cl0 = util.load_model('model-cl0-2.pt')
+model_cl1 = util.load_model('model-cl1-4.pt')
 outClasses = 2
 
 
-TEST_PATH = './data/test.pth'
+TEST_PATH = './data/test_class1.pth'
 # TEST_PATH = './data/train_class1.pth'
 
 normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
@@ -53,7 +53,7 @@ classmeans /= 255.0
 # util.plot_results_for_images(model_cl0, dataloader)
 
 # ***** EVALUATION ********
-testset = loadData.TestDataset(TEST_PATH, test_trans, normalize=True)
+testset = loadData.TestDataset(TEST_PATH, test_trans, normalize=False, cielab=False)
 testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 
 # make predictions for all test samples
@@ -80,13 +80,10 @@ for i, data in enumerate(testdataloader):
     for k in range(classmeans.shape[0]):
         cdist[k] = np.sum((classmeans[k,:] - imgmean[0:3])**2)
         
-   
-
-
     # ipdb.set_trace()
     c = np.int( np.argmin(cdist) )
-    if c == 0:
-        print("Class 0")
+    #if c == 0:
+    #    print("Class 0")
         #plt.figure(1)
         #plt.subplot(1,2,1)
         #plt.imshow(img)
@@ -98,16 +95,16 @@ for i, data in enumerate(testdataloader):
             
         #img = (img-0.5)/0.5
         #x_test[0,:] = t.from_numpy(img).type(torch.FloatTensor).permute(2,0,1).cuda()
-        output = util.eval_augmentation(model_cl0, inputs, testAugm)
+    #    output = util.eval_augmentation(model_cl0, inputs, testAugm)
         # output = model_cl0(x_test)
         # output = util.evaluate_model_tiled(model_cl0, x_test, outClasses, 256)
         # ipdb.set_trace()
 
-    else:
+    #else:
         # continue
         # output = util.evaluate_model_tiled(model_cl1, x_test, outClasses, 256)
         # output = model_cl1(x_test)
-        output = util.eval_augmentation(model_cl1, inputs, testAugm)
+    output = util.eval_augmentation(model_cl1, inputs, testAugm)
   
     #ipdb.set_trace() 
 
@@ -171,7 +168,7 @@ if 1:
         #                                resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True),
         #                                resize(output_t[2], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)), axis=0)
         
-        # plt.figure(20), plt.subplot(1,2,1), plt.imshow(preds_test_upsampled[0,:,:]), plt.subplot(1,2,2), plt.imshow(preds_test_upsampled[1,:,:]), plt.show()
+        plt.figure(20), plt.subplot(1,2,1), plt.imshow(preds_test_upsampled[0,:,:]), plt.subplot(1,2,2), plt.imshow(preds_test_upsampled[1,:,:]), plt.show()
         
         print(preds_test_upsampled.shape)
         labels = util.competition_loss_func(preds_test_upsampled,useCentroid=useCentroid)
