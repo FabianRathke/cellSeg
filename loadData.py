@@ -22,7 +22,7 @@ from random import *
 import PIL
 
 from skimage import exposure
- 
+from skimage.measure import regionprops
 
 # from scipy import signal
 from scipy import ndimage
@@ -128,7 +128,7 @@ def crop_nparray(img, xy):
 
 
 class Dataset():
-    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0):
+    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0, scaleEq=False):
         self.datas = data
         self.useCentroid = use_centroid
         self.hist_eq = histEq
@@ -146,7 +146,7 @@ class Dataset():
         self.maskConf = maskConf
         
         if sum(maskConf) > 0:
-            print("Using masks {}".format(", ".join([name for i,name in enumerate(self.names) if maskConf[i]])))
+            print("Using masks: {}".format(", ".join([name for i,name in enumerate(self.names) if maskConf[i]])))
         else:
             print("Use 3 class mask (background, cells, boundary between cells)")
 
@@ -155,7 +155,50 @@ class Dataset():
             for i in range(len(data)):
                 sys.stdout.write("\r" + str(i))
                 data[i]['img'] = equalHist(data[i]['img'])
-       
+            sys.stdout.write("\n")
+             
+        if scaleEq and len(data) > 0:
+            #ipdb.set_trace()
+            print("Perform cell size normalization")            
+
+            # Compute average size of all nuclei
+            mean_size = np.zeros((1,2))
+            for i in range(len(data)):
+                sys.stdout.write("\r" + str(i))             
+                rp = regionprops(data[i]['mask'].numpy().astype(int))
+                mean_i = np.abs([np.array([r.bbox[1]-r.bbox[3], r.bbox[0]-r.bbox[2]]) for r in rp]).mean(axis=0)
+                mean_size += mean_i
+            mean_size /= len(data)
+            sys.stdout.write("\n")
+            print(mean_size)
+
+            for i in range(len(data)): 
+                #ipdb.set_trace()
+                #plt.figure(1), plt.subplot(1,2,1), plt.imshow(data[i]['mask'])
+                
+                rp = regionprops(data[i]['mask'].numpy().astype(int))
+                mean_i = np.abs([np.array([r.bbox[1]-r.bbox[3], r.bbox[0]-r.bbox[2]]) for r in rp]).mean(axis=0)
+                #print("before - after")
+                #print(mean_i)
+                                 
+                scale_size = np.round((mean_size[0]/mean_i) * data[i]['mask'].shape).astype(int)  
+                            
+                pil_img = PIL.Image.fromarray(data[i]['mask'].numpy())
+                pil_img = pil_img.resize(scale_size, PIL.Image.NEAREST)
+                data[i]['mask'] = t.DoubleTensor(np.array(pil_img).astype(int))
+
+                #rp = regionprops(data[i]['mask'].numpy().astype(int))
+                #mean_i2 = np.abs([np.array([r.bbox[1]-r.bbox[3], r.bbox[0]-r.bbox[2]]) for r in rp]).mean(axis=0)
+                #print(mean_i2)
+
+                #plt.subplot(1,2,2), plt.imshow(data[i]['mask']), plt.show()
+
+                pil_img = PIL.Image.fromarray(data[i]['img'].numpy())
+                pil_img = pil_img.resize(scale_size, PIL.Image.BILINEAR)
+                data[i]['img'] = t.ByteTensor(np.array(pil_img).astype(float))
+
+                # plt.figure(1), plt.imshow(data[i]['img']), plt.show()
+                   
         self.datas = data
 
     def __getitem__(self, index):
@@ -163,14 +206,11 @@ class Dataset():
         img = data['img'].numpy()
         mask = data['mask'][:,:,None].byte().numpy()
 
-#        if self.hist_eq:
-#            img = (exposure.equalize_adapthist(img, clip_limit=0.03)*255).astype(np.uint8)
-       
         if self.augment == True:
             imgWidth = self.imgWidth
 
             # do cropping to imgWidth x imgWidth if *any* dimension is larger than imgWidth
-            if np.any(np.asarray(img.shape[0:2]) > imgWidth):                
+            if np.all(np.asarray(img.shape[0:2]) > imgWidth):                
                 # crop 
                 xcoord = randint(0,img.shape[1] - imgWidth )
                 ycoord = randint(0,img.shape[0] - imgWidth )
@@ -189,7 +229,6 @@ class Dataset():
             # mirror - left/right
             rint = randint(0, 100)
             if p  > rint:
-                # print("Flip LR")
                 mask = np.fliplr(mask)
                 img  = np.fliplr(img)
     
@@ -197,7 +236,6 @@ class Dataset():
             # mirror - up/down
             rint = randint(0, 100)
             if p > rint:
-                # print("Flip UD")
                 mask = np.flipud(mask)
                 img = np.flipud(img)
 
@@ -205,7 +243,6 @@ class Dataset():
             # transpose
             rint = randint(0, 100)
             if p > rint:
-                # print("Transpose")
                 mask = np.transpose(mask, (1,0,2))
                 img = np.transpose(img, (1,0,2))
         
@@ -217,7 +254,7 @@ class Dataset():
         for i,idx in enumerate(np.unique(mask)):
             mask_[mask==int(idx)] = i
         mask = mask_
-        mask_stacked = makeMask(mask, self.maskConf)
+        mask_stacked = makeMask(mask, self.maskConf, self.names)
 
         return img, mask_stacked, mask
     
@@ -225,7 +262,7 @@ class Dataset():
         return len(self.datas)
 
 
-def makeMask(mask, maskConf):
+def makeMask(mask, maskConf, names, useCentroid=False):
     if sum(maskConf) > 0:
         # if there is at least one cell
         if mask.sum() > 0:
@@ -235,7 +272,7 @@ def makeMask(mask, maskConf):
 
             # centroids 
             # print(mask)
-            if self.useCentroid:
+            if useCentroid:
                 centroid_mask = np.zeros((mask[0,:,:].shape)) #.squeeze(axis=2).shape)) 
                 rp = measure.regionprops(mask[0,:,:].numpy().astype(int)) #) # .squeeze(axis=2))
                 for props in rp:
@@ -247,7 +284,7 @@ def makeMask(mask, maskConf):
                 centroid_mask = t.from_numpy(centroid_mask).unsqueeze(0).float()
         else:
             edge_mask = mask.clone()
-            if self.useCentroid:
+            if useCentroid:
                 centroid_mask = mask.clone()
 
         #plt.figure(1)

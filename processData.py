@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import imageio
 
-
+from skimage import exposure
 import ipdb
 
 # List files in directory
@@ -15,19 +15,18 @@ datasetPath = '../input/stage1_train/'
 trainDirNames = next(os.walk(datasetPath))[1]
 
 ntrain = len(trainDirNames)
-# ntrain = 100
+# ntrain = 10
 
-meanmat = np.zeros((ntrain,4))
-stdmat  = np.zeros((ntrain,4))
+
+meanmat = np.zeros((ntrain,3))
+stdmat  = np.zeros((ntrain,3))
 for k in range(ntrain):
     
     name  = trainDirNames[k]
     path = datasetPath + name + '/images/' + name + '.png'
 
-    image = imageio.imread(path)
-
-    # ipdp.set_trace()
-
+    image = imageio.imread(path)[:,:,0:4] 
+    image =  (exposure.equalize_adapthist(np.array(image))*255).astype(np.uint8)
 
     rows, cols, dims = image.shape
     meanmat[k,:] = np.mean(np.reshape(image,(rows*cols,dims)), axis=0)
@@ -55,6 +54,12 @@ X = meanmat # [datapoints X features]
 
 n_clusters = 2
 y_pred = KMeans(n_clusters=n_clusters).fit_predict(X)
+def equalHist(img):
+    img = exposure.equalize_adapthist(img)
+    #img = denoise_tv_chambolle(img, weight=0.02, multichannel=False)
+    return 
+
+
 
 nClusters = np.zeros((n_clusters))
 for k in range(n_clusters):
@@ -87,7 +92,7 @@ for k in range(1,ndisp+1):
         plt.imshow(image)
 
 
-classmean = np.zeros((n_clusters,4))
+classmean = np.zeros((n_clusters,3))
 classn    = np.zeros((n_clusters))
 
 
@@ -104,8 +109,8 @@ classmean = classmean / (classn[:,None])
 ipdb.set_trace()
 
 import pandas as pd 
-df = pd.DataFrame(classmean[:,:-1])
-df.to_csv("class_means.csv")
+df = pd.DataFrame(classmean)
+df.to_csv("class_means_norm.csv")
 
 
 

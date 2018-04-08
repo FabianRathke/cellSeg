@@ -15,6 +15,16 @@ import os.path
 from skimage.measure import regionprops
 from skimage.morphology import binary_erosion
 
+from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage.morphology import binary_erosion
+
+import torch as t
+from torchvision import transforms as tsf
+
+from skimage.transform import resize
+
+import PIL
+# from PIL import Image
 
 from IPython import embed
 
@@ -474,3 +484,237 @@ def train_model(model, optimizer, lossFunc, dataloader, validdataloader, args):
             #print('acc: %.3f, score: %.3f' % (acc, score))
 
     return model
+
+
+def evaluate_model_tiled(model, data_orig, outClasses, block_size):
+  
+    batchn, dims, rows_orig, cols_orig = data_orig.shape
+
+    # if any dim is smaller than block_size -> reshape it
+    if np.any(np.array([rows_orig,cols_orig]) < block_size):
+        #st_trans = tsf.Compose([
+        #                        tsf.ToPILImage(),
+        #                        tsf.Resize((np.maximum(rows_orig,block_size), np.maximum(cols_orig,block_size))),
+        #                        #tsf.Resize((block_size, block_size),PIL.Image.BILINEAR),
+        #                        tsf.ToTensor()
+        #                        ])
+        #data = st_trans( data_orig.squeeze().data.cpu()*0.5+0.5 )
+        #data = data.unsqueeze(0)/0.5-0.5
+        #data = t.autograd.Variable(data,volatile=True).cuda()
+
+        #ipdb.set_trace()
+        rs_rows = np.maximum(rows_orig,block_size)
+        rs_cols = np.maximum(cols_orig,block_size)
+        data_resized = resize(np.array(data_orig[0].permute(1,2,0).squeeze().data.cpu())*0.5+0.5, (rs_rows, rs_cols),  mode='constant', preserve_range=True)
+        data_resized = t.autograd.Variable(t.FloatTensor(data_resized), volatile=True).cuda()
+        data_resized = data_resized.permute(2,0,1)
+        data = (data_resized.unsqueeze(0)-0.5)/0.5
+
+        #ipdb.set_trace()
+
+        #pil_img = PIL.Image.fromarray(data_orig.squeeze().data.cpu())
+        #pil_img = pil_img.resize((cols_orig,rows_orig),PIL.Image.BILINEAR)
+        #data = pil_img.unsqueeze(0)
+        #data = t.autograd.Variable(data,volatile=True).cuda()
+        
+		#plt.figure(10), plt.imshow((data_orig.squeeze().permute(1,2,0).data.cpu().numpy()*0.5)+0.5), plt.show()
+        #plt.figure(10), plt.imshow(data.squeeze().permute(1,2,0).data.cpu().numpy()), plt.show()
+    else:
+        data = data_orig            
+
+    batchn, dims, rows, cols = data.shape
+
+
+    N = rows*cols
+    idx = np.reshape(list(range(N)), (rows,cols))
+    
+    offset_rows = 1 if (rows % block_size == 0) else 0
+    offset_cols = 1 if (cols % block_size == 0) else 0
+    
+    row_seeds = np.linspace(block_size//2, rows-block_size//2, np.ceil(rows / block_size)+offset_rows + 1)
+    col_seeds = np.linspace(block_size//2, cols-block_size//2, np.ceil(cols / block_size)+offset_cols + 1)
+    
+    coord_seeds = [(row_seeds[i], col_seeds[j]) for i in range(len(row_seeds)) for j in range(len(col_seeds))]
+    coord_seeds = np.floor(coord_seeds)
+    coord_seeds = np.unique(coord_seeds,axis=0)
+ 
+    # output variable    
+    img_fused = np.zeros((outClasses,rows,cols))
+
+
+    block_w = block_size # base_block_w + overlapp_block_w # base shape + overlapp
+    for y,x in coord_seeds:
+        xx = list(map(int,[x - block_w//2, x+block_w//2 + block_w % 2]))
+        yy = list(map(int,[y - block_w//2, y+block_w//2 + block_w % 2]))
+        
+        # Left boundary
+        if xx[0] < 0:
+            xx[1] = np.minimum(xx[1]+np.abs(xx[0]),cols)
+            xx[0] = 0
+        
+        # Top boundary
+        if yy[0] < 0:
+            yy[1] = np.minimum(yy[1]+np.abs(yy[0]), rows)
+            yy[0] = 0
+
+		# Right boundary
+        if xx[1] >= cols:
+            xx[0] = np.maximum(cols - block_w,0)
+            xx[1] = cols
+        # Bottom boundary
+        if yy[1] >= rows:
+            yy[0] = np.maximum(rows - block_w,0)
+            yy[1] = rows
+
+        
+        # Crop data and index patch
+        patch = data[:,:,yy[0]:yy[1],xx[0]:xx[1]]
+        patch_idx = idx[yy[0]:yy[1],xx[0]:xx[1]]
+        patch_idx = np.ascontiguousarray(patch_idx)
+       
+        #ipdb.set_trace() 
+        #plt.figure(1), plt.imshow((patch.data.squeeze().permute(1,2,0).cpu().numpy()*0.5)+0.5), plt.show()
+
+        patch_idx.shape = (-1,)
+        
+		# Predict patch
+        output = model(patch).cpu()
+        
+        # Add to prediction result
+        fuse_mask = np.ones((rows,cols))
+        for i in range(output.shape[1]):          
+            out = output[:,i,:].squeeze().data.cpu().numpy()
+            out.shape = (-1,1)
+                                   
+            fused_i = np.zeros((rows,cols))
+            fused_i.shape = (-1,1)
+            fused_i[patch_idx] = out
+            fused_i.shape = (rows, cols)
+
+            fuse_mask_i = (fused_i != 0).astype(float)
+            fuse_mask = (img_fused[i,:] != 0).astype(float)
+
+            overlap = fuse_mask * fuse_mask_i
+            ax0 = overlap.sum(axis=0)
+            ax1 = overlap.sum(axis=1)
+            prune = 0
+            if (ax0.sum() + ax1.sum()) > 0:
+                min_overlap = np.minimum(np.min(ax0[ax0>0]), np.min(ax1[ax1>0]))
+                prune = np.int(min_overlap / 4)
+
+            if prune > 0:
+                fuse_mask_i_erroded = binary_erosion(fuse_mask_i, iterations=prune, border_value=1).astype(float)
+                fuse_mask_i_erroded = gaussian_filter(fuse_mask_i_erroded, sigma=0.1, mode='reflect')
+
+                fuse_mask_erroded = binary_erosion(fuse_mask, iterations=prune, border_value=1).astype(float)
+                fuse_mask_erroded = gaussian_filter(fuse_mask_erroded, sigma=0.1, mode='reflect')
+            else:
+                fuse_mask_i_erroded = fuse_mask_i
+                fuse_mask_erroded = fuse_mask 
+
+            # ipdb.set_trace()
+            img_fused[i,:] = np.maximum(img_fused[i,:] * fuse_mask_erroded, fused_i * fuse_mask_i_erroded)
+
+            # plt.figure(2), plt.imshow(img_fused[i,:]), plt.show()
+
+    # Resize the image to its original size if needed
+    img_fused.shape = (img_fused.shape[0],rows,cols)
+    result = np.zeros((img_fused.shape[0], rows_orig, cols_orig))
+    if np.any(np.array([rows_orig,cols_orig]) < block_size):
+   
+        # ipdb.set_trace()
+        for i in range(img_fused.shape[0]):
+            #  ipdb.set_trace()
+
+            result[i,:,:] = resize(img_fused[i,:,:], (rows_orig, cols_orig),  mode='constant', preserve_range=True)
+
+            #pil_img = PIL.Image.fromarray(img_fused[i,:,:])
+            #pil_img = pil_img.resize((cols_orig,rows_orig),PIL.Image.BILINEAR)
+            #result[i,:,:] = np.array(pil_img)
+
+        # plt.figure(10), plt.imshow(data.squeeze().permute(1,2,0).data.cpu().numpy()), plt.show()
+    else:
+        result = img_fused    
+
+    if 0:     
+        plt.figure(2),
+        plt.subplot(2,2,1)
+        plt.imshow(result[0,:,:])
+        plt.subplot(2,2,2)
+        plt.imshow(result[1,:,:])
+        #plt.subplot(2,2,3)
+        #plt.imshow(result[2,:,:])
+        plt.show()
+        
+    # ipdb.set_trace()
+
+    result = np.expand_dims(result, axis=0)
+ 
+    return result
+
+
+
+
+def eval_augmentation(model, inputs, testAugm=[1, 0, 0, 0]):
+    ''' 
+        testAugm = [normal, transpose, flip ud, flip lr]
+
+		Return average response of all augmentations.
+    '''    
+
+    results_augm = []
+    # normal
+    if testAugm[0] == 1:
+        x_test = t.autograd.Variable(inputs, volatile=True).cuda()
+        output1 = model(x_test)
+        results_augm.append(output1)
+
+    # transpose
+    if testAugm[1] == 1:
+        imT = inputs.transpose(2,3)
+        imT_x = t.autograd.Variable(imT, volatile=True).cuda()
+        output2 = model(imT_x)
+        output2 = output2.transpose(2,3)
+        results_augm.append(output2)
+  
+    # flip up
+    if testAugm[2] == 1:
+        imgLR = inputs.clone()
+        for i in range(imgLR.shape[1]):
+            imgLR[0,i,:,:] = t.from_numpy(np.flipud(imgLR[0,i,:,:].cpu().numpy()).copy())
+        imgLR_x = t.autograd.Variable(imgLR, volatile=True).cuda()
+        output3 = model(imgLR_x)
+        for i in range(output3.shape[1]):
+            output3[0,i,:,:] = t.from_numpy(np.flipud(output3[0,i,:,:].cpu().data.numpy()).copy()).cuda()
+        results_augm.append(output3)
+
+	# flip lr
+    if testAugm[3] == 1:
+        imgLR = inputs.clone()
+        for i in range(imgLR.shape[1]):
+            imgLR[0,i,:,:] = t.from_numpy(np.fliplr(imgLR[0,i,:,:].cpu().numpy()).copy())
+        imgLR_x = t.autograd.Variable(imgLR, volatile=True).cuda()
+        output3 = model(imgLR_x)
+        for i in range(output3.shape[1]):
+            output3[0,i,:,:] = t.from_numpy(np.fliplr(output3[0,i,:,:].cpu().data.numpy()).copy()).cuda()
+        results_augm.append(output3)
+
+    out = np.zeros(results_augm[0].shape)
+    for item in results_augm:
+        out = out + item.cpu().data.numpy()
+    out /= len(results_augm)
+
+    out = t.FloatTensor(out).cuda()
+
+    if 0:
+        plt.figure(1),
+        plt.subplot(2,2,1)
+        plt.imshow(out[0,0,:,:].cpu())
+        plt.subplot(2,2,2)
+        plt.imshow(out[0,1,:,:].cpu())
+        #plt.subplot(2,2,3)
+        #plt.imshow(output1[0,0,:,:].cpu() - output2[0,0,:,:].cpu())
+        plt.show()
+
+    return out
+
