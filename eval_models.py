@@ -8,6 +8,7 @@ import PIL
 from skimage.transform import resize
 import sys
 import ipdb
+import imp
 
 # PYTORCH
 import torch
@@ -18,6 +19,9 @@ from torchvision import transforms as tsf
 from models import *
 import loadData
 import util
+
+imp.reload(util)
+imp.reload(loadData)
 
 # ***** SET PARAMETERS *****
 
@@ -30,7 +34,7 @@ args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
 args.normalize = True
-numModel = [4,5]
+numModel = [4,7]
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '2,3' # 0,1,2,3,4
 print("Using gpus {}.".format(os.environ['CUDA_VISIBLE_DEVICES']))
@@ -51,14 +55,24 @@ def write_csv(results, results_splits, images, test_ids, folder):
     print("Encoding and plotting")
     for i,item in enumerate(results):
         sys.stdout.write("\r" + str(i))
-        output_t = (item[0] > 0.5).data.numpy().astype(np.int8)
+        output_t = item[0].data.numpy()#.astype(np.int8)
+        #output_t[0,output_t[0,:]<0.9] = 0 # filter bodies differently from cell masks
+        #output_t[1,output_t[1,:]<0.5] = 0 # filter bodies differently from cell masks
+        output_t[output_t < 0.5] = 0
+        output_t[output_t > 0] = 1;
+        output_t = output_t.astype(np.int8)
+
         # upsample
         preds_test_upsampled = resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
         preds_test_upsampled = np.stack((preds_test_upsampled,resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)))
         if len(results_splits) == len(results):
-            output_t = (results_splits[i][0] > 0.5).data.numpy().astype(np.int8)
-            preds_test_upsampled[1,:] = resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
-            preds_test_upsampled = np.vstack((preds_test_upsampled,np.expand_dims(resize(output_t[0], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True),0)))
+            data = results_splits[i][0].cpu().data.numpy()
+            #output_t = (results_splits[i][0] > 0.5).data.numpy().astype(np.int8) # old approach with one model having smaller cell bodies (model 5)
+            output_t = data.argmax(axis=0)
+            output_t[output_t == 1] = 0
+            output_t[output_t == 2] = 1
+            #preds_test_upsampled[1,:] = resize(output_t[1], (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True)
+            preds_test_upsampled = np.vstack((preds_test_upsampled,np.expand_dims(resize(output_t, (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True),0)))
        
         # predict labels
         labels = util.competition_loss_func(preds_test_upsampled)
@@ -94,16 +108,17 @@ for runClass in range(1):
     testset = loadData.TestDataset(TEST_PATH, test_trans, args.normalize)
     testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 
-    print("Load model {}".format('./model-cl' + str(runClass) + '-' + str(numModel[0]) + '.pt'))
-    model = util.load_model('./model-cl' + str(runClass) + '-' + str(numModel[0]) + '.pt')
+    print("Load model {}".format('./models/model-cl' + str(runClass) + '-' + str(numModel[0]) + '.pt'))
+    model = util.load_model('./models/model-cl' + str(runClass) + '-' + str(numModel[0]) + '.pt')
     model = model.module.eval()
+    model.softmax = False
     
     inputs_, results, test_ids = make_predictions(model, testdataloader)
     
     # make predictions for all test samples
     if len(numModel) > 1:
-        print("Load model {}".format('./model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt'))
-        model = util.load_model('./model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt')
+        print("Load model {}".format('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt'))
+        model = util.load_model('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt')
         model = model.module.eval()
         _, results_splits, _ = make_predictions(model, testdataloader)
         results_splits

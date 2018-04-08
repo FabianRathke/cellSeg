@@ -113,6 +113,7 @@ def plotExampleTest(img, mask, pred, batch, fileSize, folder = 'plots'):
     vmin = .001 if pred.max() > 0 else 0
     plt.imshow(pred, interpolation = 'none', cmap = cmap, vmin=vmin); plt.axis('off')
     plt.suptitle("id: {} ({:d} x {:d})".format(batch, fileSize[0], fileSize[1]))
+    #plt.show(block=False)
     plt.savefig("{}/id_{}.png".format(folder,batch))
     plt.close()
 
@@ -128,10 +129,10 @@ def competition_loss_func(inputs, targets = None, useCentroid=0):
  
     if inputs.shape[0] > 1:
         if inputs.shape[0] > 2:
-            diff = inputs[2,:]-inputs[1,:]
+            diff = inputs[0,:]-inputs[1,:]-inputs[2,:]
         else:
             diff = inputs[0,:]-inputs[1,:]
-            
+    
         diff[diff < 0.9] = 0
         diff[diff > 0.9] = 1
 	#plt.subplot(221); plt.imshow(inputs[0,:]); plt.subplot(222); plt.imshow(inputs[1,:]); plt.subplot(223); plt.imshow(diff); plt.subplot(224); plt.imshow(targets); plt.show()

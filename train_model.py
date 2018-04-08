@@ -30,7 +30,7 @@ args.dataAugm = True
 args.imgWidth = 256
 args.normalize = True
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,3,4' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '2,3,4' # 0,1,2,3,4
 print("Using gpus {}.".format(os.environ['CUDA_VISIBLE_DEVICES']))
 
 normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
