@@ -119,7 +119,7 @@ def make_predictions(model, testdataloader, testAugm):
 
 
 classSelect = [0]
-writeCSV = 0
+writeCSV = 1
 # class 0 = grayscale
 for runClass in classSelect:
     if runClass == 0:

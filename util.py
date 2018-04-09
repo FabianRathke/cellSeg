@@ -143,26 +143,28 @@ def competition_loss_func(inputs, targets = None, useCentroid = 0, printMessage=
     if inputs.shape[0] > 1:
         if inputs.shape[0] > 2:
             #diff = inputs[0,:]-inputs[1,:]-inputs[2,:]
-            diff = binary_erosion(inputs[0,:]) - inputs[1,:] - inputs[2,:]
+            diff = inputs[0,:] - inputs[1,:] - inputs[2,:]
         else:
             #diff = inputs[0,:]-inputs[1,:]
-            diff = binary_erosion(inputs[0,:]) - inputs[1,:] - inputs[2,:]
-    
-        diff[diff < 0.9] = 0
-        diff[diff > 0.9] = 1
+            diff = inputs[0,:] - inputs[1,:]
+        diff[diff < 0.8] = 0
+        diff[diff > 0.8] = 1
         #plt.subplot(221); plt.imshow(inputs[0,:]); plt.subplot(222); plt.imshow(inputs[1,:]); plt.subplot(223); plt.imshow(diff); plt.subplot(224); plt.imshow(targets); plt.show()
         labels = measure.label(diff)
         bodies = inputs[0,:]
         bodies[bodies > 0.9] = 1 # threshold
+        bodies[bodies < 0.9] = 0
+        #ipdb.set_trace() 
         inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
         
-        unique, counts = np.unique(inputs, return_counts=True)
-        radi = np.sqrt(np.median(counts[1:-1])/np.pi)
+        unique, counts_ = np.unique(inputs, return_counts=True)
+        radi = np.sqrt(np.median(counts_[1:])/np.pi)
         # get average size of nuclei
-
+        #ipdb.set_trace()
         # convex hull
-        if printMessage:
-            print("before correction: {} labels".format(len(np.unique(inputs))))
+        drop_threshold = np.median(counts_[1:])/25
+        #if printMessage:
+            #print("before correction: {} labels".format(len(np.unique(inputs))))
         if 1:
             current_label = 1
             corrected = np.zeros_like(inputs)
@@ -170,7 +172,7 @@ def competition_loss_func(inputs, targets = None, useCentroid = 0, printMessage=
                 label_k = (inputs == k).astype(int)
                 rprop = regionprops(label_k)
                 n_label_k = np.sum(label_k)
-                if n_label_k > 30:
+                if n_label_k > drop_threshold:
                     n_hull    = rprop[0].convex_area - n_label_k
                     if 0 and n_hull/n_label_k > 0.2:
                         if printMessage:
@@ -193,12 +195,12 @@ def competition_loss_func(inputs, targets = None, useCentroid = 0, printMessage=
                         current_label += 1
                 else:
                     if printMessage:
-                        print("Drop cell because of size")
+                        print("Drop cell because of size {} vs. {}".format(n_label_k,drop_threshold))
 
             inputs = corrected
         
-            if printMessage:
-                print("After correction: {} labels".format(len(np.unique(corrected))))
+            #if printMessage:
+                #print("After correction: {} labels".format(len(np.unique(corrected))))
 
         if useCentroid:
             # centroids 
