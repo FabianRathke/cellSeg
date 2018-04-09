@@ -24,6 +24,8 @@ import PIL
 from skimage import exposure
 from skimage.measure import regionprops
 
+from multiprocessing import Pool
+
 # from scipy import signal
 from scipy import ndimage
 
@@ -129,9 +131,17 @@ def process_split(file_path, clustermeans, cluster, has_mask=True):
 def crop_nparray(img, xy):
     return img[xy[1]:xy[3], xy[0]:xy[2], :]
 
+def applyHistEq(img):
+    img['img'] = equalHist(img['img'])
+    return img
+
+def applyColorConv(img):
+    img['img'] = colorspaceConversion(img['img'])
+    return img
+
 
 class Dataset():
-    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 0, 0], use_centroid=0, scaleEq=False, cielab=False):
+    def __init__(self,data, source_transform, target_transform, source_target_transform=None, augment=False, histEq=False, imgWidth=256, maskConf = [1, 1, 0], use_centroid=0, scaleEq=False, cielab=False):
         self.datas = data
         self.useCentroid = use_centroid
         self.hist_eq = histEq
@@ -152,9 +162,12 @@ class Dataset():
             print("Using masks: {}".format(", ".join([name for i,name in enumerate(self.names) if maskConf[i]])))
         else:
             print("Use 3 class mask (background, cells, boundary between cells)")
+        
+        #pool = Pool(8)
 
         if histEq:
             print("Perform histogram equalization")
+            #data = pool.map(applyHistEq, data)
             for i in range(len(data)):
                 sys.stdout.write("\r" + str(i))
                 data[i]['img'] = equalHist(data[i]['img'])
@@ -162,17 +175,18 @@ class Dataset():
        
         if cielab:    
             print("Perform color space conversion")
+            #data = pool.map(applyColorConv, data)
             for i in range(len(data)):           
                 sys.stdout.write("\r" + str(i))
                 data[i]['img'] = colorspaceConversion(data[i]['img'])
-                sys.stdout.write("\n")
+            sys.stdout.write("\n")
 
                 #d2 = rgb2lab(data[i]['img'])
                 # remapp to 8-bit
                 #d2[:,:,0] = d2[:,:,0]*(255/100)
                 #data[i]['img'] = t.ByteTensor(d2 + [0,128,128])
                     
-                                                                  
+        #pool.close()       
         if scaleEq and len(data) > 0:
             #ipdb.set_trace()
             print("Perform cell size normalization")            
@@ -313,6 +327,7 @@ def makeMask(mask, maskConf, names, useCentroid=False):
         # binary body mask
         mask_binary = mask.clone()
         mask_binary[mask > 0] = 1
+        #ipdb.set_trace()
         # substract edges from mask
         #mask_binary_diff = mask_binary - edge_mask
         #mask_binary_diff[mask_binary < 0] = 0

@@ -14,6 +14,7 @@ import ipdb
 import os.path
 from skimage.measure import regionprops
 from skimage.morphology import binary_erosion
+from skimage.morphology import binary_dilation
 
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import binary_erosion
@@ -40,7 +41,6 @@ def soft_dice_loss(inputs, targets):
     score = 1 - score.sum()/num
     return score
 
-
 def soft_dice_weighted_loss(inputs, targets):
     # ipdb.set_trace()
     num = targets.size(1)
@@ -48,7 +48,7 @@ def soft_dice_weighted_loss(inputs, targets):
     score_total = 0
     for i in range(targets.size(0)):
         class_sum = targets[i,:,:,:].sum(1).sum(1)
-        class_w = 1-class_sum/(class_sum.sum()+1)
+        class_w = (1-class_sum/(class_sum.sum()+1))
         class_w = class_w/(class_w.sum()+1)
 
         m1 = inputs[i,:,:,:].view(num,-1)
@@ -56,7 +56,6 @@ def soft_dice_weighted_loss(inputs, targets):
         intersection = (m1 * m2)
 
         score = 2. * (intersection.sum(1)+10**-10) / (m1.sum(1) + m2.sum(1)+10**-10)
-
         score_total += (score*class_w).sum()
      
     score = 1 - score_total/targets.size(0)
@@ -123,12 +122,16 @@ def plotExampleTest(img, mask, pred, batch, fileSize, folder = 'plots'):
     vmin = .001 if pred.max() > 0 else 0
     plt.imshow(pred, interpolation = 'none', cmap = cmap, vmin=vmin); plt.axis('off')
     plt.suptitle("id: {} ({:d} x {:d})".format(batch, fileSize[0], fileSize[1]))
-    #plt.show(block=False)
-    plt.savefig("{}/id_{}.png".format(folder,batch))
-    plt.close()
+    if folder == '':
+        plt.show(block=False)
+    else:
+        plt.savefig("{}/id_{}.png".format(folder,batch))
+        plt.close()
 
+def p(img):
+    plt.figure(); plt.imshow(img); plt.show(block=False);
 
-def competition_loss_func(inputs, targets = None, useCentroid=0):
+def competition_loss_func(inputs, targets = None, useCentroid = 0, printMessage=False):
     ''' https://www.kaggle.com/c/data-science-bowl-2018#evaluation
         evaluates IoU (intersection over union) for various thresholds and calculates
         TPs, FPs and FNs for all objects (detected vs. ground truth). The final score
@@ -139,24 +142,27 @@ def competition_loss_func(inputs, targets = None, useCentroid=0):
  
     if inputs.shape[0] > 1:
         if inputs.shape[0] > 2:
-            diff = inputs[0,:]-inputs[1,:]-inputs[2,:]
+            #diff = inputs[0,:]-inputs[1,:]-inputs[2,:]
+            diff = binary_erosion(inputs[0,:]) - inputs[1,:] - inputs[2,:]
         else:
-            diff = inputs[0,:]-inputs[1,:]
+            #diff = inputs[0,:]-inputs[1,:]
+            diff = binary_erosion(inputs[0,:]) - inputs[1,:] - inputs[2,:]
     
         diff[diff < 0.9] = 0
         diff[diff > 0.9] = 1
-	#plt.subplot(221); plt.imshow(inputs[0,:]); plt.subplot(222); plt.imshow(inputs[1,:]); plt.subplot(223); plt.imshow(diff); plt.subplot(224); plt.imshow(targets); plt.show()
+        #plt.subplot(221); plt.imshow(inputs[0,:]); plt.subplot(222); plt.imshow(inputs[1,:]); plt.subplot(223); plt.imshow(diff); plt.subplot(224); plt.imshow(targets); plt.show()
         labels = measure.label(diff)
         bodies = inputs[0,:]
         bodies[bodies > 0.9] = 1 # threshold
         inputs = morph.watershed(-ndimage.distance_transform_edt(diff), labels, mask=bodies)
         
-        # ipdb.set_trace()
         unique, counts = np.unique(inputs, return_counts=True)
         radi = np.sqrt(np.median(counts[1:-1])/np.pi)
         # get average size of nuclei
 
-        # convex hull        
+        # convex hull
+        if printMessage:
+            print("before correction: {} labels".format(len(np.unique(inputs))))
         if 1:
             current_label = 1
             corrected = np.zeros_like(inputs)
@@ -166,7 +172,9 @@ def competition_loss_func(inputs, targets = None, useCentroid=0):
                 n_label_k = np.sum(label_k)
                 if n_label_k > 30:
                     n_hull    = rprop[0].convex_area - n_label_k
-                    if n_hull/n_label_k > 0.2:
+                    if 0 and n_hull/n_label_k > 0.2:
+                        if printMessage:
+                            print("Split cells")
                         # ipdb.set_trace()
                         # radi = np.sqrt((n_label_k)/np.pi)
                         fprint = np.int(np.maximum(2*np.floor(radi/2)+1,3))
@@ -182,8 +190,15 @@ def competition_loss_func(inputs, targets = None, useCentroid=0):
                     for u in unique[np.arange(len(unique))!=0]:
                         # corrected = corrected + (label_k == u).astype(int)*current_label
                         corrected[label_k == u] = current_label
-                        #print(current_label)
                         current_label += 1
+                else:
+                    if printMessage:
+                        print("Drop cell because of size")
+
+            inputs = corrected
+        
+            if printMessage:
+                print("After correction: {} labels".format(len(np.unique(corrected))))
 
         if useCentroid:
             # centroids 
@@ -218,8 +233,7 @@ def competition_loss_func(inputs, targets = None, useCentroid=0):
                     corrected[label_k == u] = current_label
                     current_label += 1
 
-            inputs = corrected
-
+ 
             #plt.subplot(2,2,2)
             #plt.imshow(corrected)
             #plt.subplot(2,2,3)

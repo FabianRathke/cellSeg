@@ -24,13 +24,13 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 125
+args.numEpochs = 100
 args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
 args.normalize = True
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2,3,4' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,3' # 0,1,2,3,4
 print("Using gpus {}.".format(os.environ['CUDA_VISIBLE_DEVICES']))
 
 normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
@@ -70,10 +70,11 @@ else:
     ])
 
 
+classSelect = [1]
 
-# class 0 = grayscale
-for runClass in range(1):
-    args.modelName = 'model-cl' + str(runClass) + '-0'
+# bodies unet
+for runClass in classSelect:
+    args.modelName = './models/model-cl' + str(runClass) + '-0'
     args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
 
     # ***** LOAD DATA ********
@@ -84,35 +85,70 @@ for runClass in range(1):
     # Class 1: 124
     trainSamples = 541 if (runClass == 0) else 124
 
-    print("Load data")
     splits = loadData.createKSplits(trainSamples, 5, random_state=0)
     # use no validation set
     splits[0] = np.zeros((0))
     train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 
     normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
-    #lossFunc = util.soft_dice_loss
-    lossFunc = util.cross_entropy
-    # normalize = tsf.Normalize(mean = [0.17071716,  0.15513969,  0.18911588], std = [0.03701544,  0.05455154,  0.03268249])
+    lossFunc = util.soft_dice_loss
 
-    dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, True, args.imgWidth, maskConf = [0,0,0])
+    print("Train Unet with dice loss")
+    cielab = True if runClass == 1 else False; cielab = False
+    histEq = True if runClass == 0 else False
+    dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [1,1,0], cielab=cielab)
     dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
-    validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, True, args.imgWidth, maskConf = [0,0,0])
+    validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [1,1,0], cielab=cielab)
     validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
 
     #model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-    model = UNet2(3,3,learn_weights=args.learnWeights, softmax=True) # Kaggle notebook implementation
+    model = UNet2(3,2,learn_weights=args.learnWeights, softmax=False) # Kaggle notebook implementation
     model = nn.DataParallel(model).cuda()
 
     optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
 
     model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
     util.save_model(model,args.modelName) 
-    #model.eval()
 
-    #numModel = [6]
-    #model = util.load_model('./model-cl' + str(runClass) + '-' + str(numModel[0]) + '.pt')
-    #model = model.module.eval()
+# boundary detection model
+if 1:
+    for runClass in classSelect:
+        args.modelName = './models/model-cl' + str(runClass) + '-0'
+        args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
 
-    #util.plot_all_predictions(model,validdataloader,'plots/gallery_'+str(runClass))
+        # ***** LOAD DATA ********
+        TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
+        TEST_PATH = './data/test_class' + str(runClass) + '.pth'
+
+        # Class 0: 541
+        # Class 1: 124
+        trainSamples = 541 if (runClass == 0) else 124
+
+        print("Load data")
+        splits = loadData.createKSplits(trainSamples, 5, random_state=0)
+        # use no validation set
+        splits[0] = np.zeros((0))
+        train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
+
+        normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
+        lossFunc = util.cross_entropy
+
+        print("Train Unet with softmax")
+        cielab = True if runClass == 1 else False; cielab = False
+        histEq = True if runClass == 0 else False
+        dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [0,0,0], cielab=cielab)
+        dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
+
+
+        validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [0,0,0], cielab=cielab)
+        validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
+
+        #model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
+        model = UNet2(3,3,learn_weights=args.learnWeights, softmax=True) # Kaggle notebook implementation
+        model = nn.DataParallel(model).cuda()
+
+        optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
+
+        model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
+        util.save_model(model,args.modelName) 

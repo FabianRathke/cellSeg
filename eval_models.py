@@ -35,7 +35,6 @@ args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
 args.normalize = True
-numModel = [2,3]
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '2,3' # 0,1,2,3,4
 print("Using gpus {}.".format(os.environ['CUDA_VISIBLE_DEVICES']))
@@ -76,7 +75,8 @@ def write_csv(results, results_splits, images, test_ids, folder):
             preds_test_upsampled = np.vstack((preds_test_upsampled,np.expand_dims(resize(output_t, (item[1][0][0], item[1][0][1]),  mode='constant', preserve_range=True),0)))
        
         # predict labels
-        labels = util.competition_loss_func(preds_test_upsampled)
+        print("predict labels for image {}".format(i))
+        labels = util.competition_loss_func(preds_test_upsampled, printMessage = True)
         
         # ############# POST PROCESSING ################
         labels_filled = post_processing.fill_holes(labels)
@@ -118,11 +118,18 @@ def make_predictions(model, testdataloader, testAugm):
     return inputs_, results, test_ids
 
 
+classSelect = [0]
+writeCSV = 0
 # class 0 = grayscale
-for runClass in range(1):
+for runClass in classSelect:
+    if runClass == 0:
+        numModel = [4,7]
+    else:
+        numModel = [8,9]
     # ***** LOAD DATA ********
     TEST_PATH = './data/test_class' + str(runClass) + '.pth'
-    testset = loadData.TestDataset(TEST_PATH, test_trans, args.normalize)
+    cielab = True if runClass == 1 else False; cielab = False
+    testset = loadData.TestDataset(TEST_PATH, test_trans, args.normalize,cielab)
     testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 
     print("Load model {}".format('./models/model-cl' + str(runClass) + '-' + str(numModel[0]) + '.pt'))
@@ -142,14 +149,14 @@ for runClass in range(1):
     else:
         results_splits = []
    
-    # ipdb.set_trace() 
-    # upsample and encode
-    new_test_ids, rles = write_csv(results, results_splits, inputs_, test_ids, 'plots/testset-hist-' + str(runClass))
+    if writeCSV:
+        # upsample and encode
+        new_test_ids, rles = write_csv(results, results_splits, inputs_, test_ids, 'plots/testset-hist-' + str(runClass))
 
-    sub = pd.DataFrame()
-    sub['ImageId'] = new_test_ids
-    sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
+        sub = pd.DataFrame()
+        sub['ImageId'] = new_test_ids
+        sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
 
-    # save to submission file
-    args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-' + str(numModel[0])
-    util.save_submission_file(sub,args.submissionName)
+        # save to submission file
+        args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-' + str(numModel[0])
+        util.save_submission_file(sub,args.submissionName)
