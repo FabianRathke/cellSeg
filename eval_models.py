@@ -142,9 +142,9 @@ for runClass in classSelect:
     # make predictions for all test samples
     if len(numModel) > 1:
         print("Load model {}".format('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt'))
-        model = util.load_model('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt')
-        model = model.module.eval()
-        _, results_splits, _ = make_predictions(model, testdataloader, [0,0,0,0])
+        model_splits = util.load_model('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt')
+        model_splits = model_splits.module.eval()
+        _, results_splits, _ = make_predictions(model_splits, testdataloader, [0,0,0,0])
         results_splits
     else:
         results_splits = []

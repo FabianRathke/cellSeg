@@ -30,7 +30,7 @@ from multiprocessing import Pool
 from scipy import ndimage
 
 from skimage.color import rgb2lab
-
+from collections import Counter
 
 def process(file_path, has_mask=True):
     file_path = Path(file_path)
@@ -292,6 +292,10 @@ class Dataset():
         return len(self.datas)
 
 
+#    def printImageSize(self):
+#        ipdb.set_trace()
+#        print("test")
+
 def makeMask(mask, maskConf, names, useCentroid=False):
     if sum(maskConf) > 0:
         # if there is at least one cell
@@ -369,6 +373,9 @@ class TestDataset():
         if normalize:
             print("Perform histogram equalization")
             for i in range(len(self.datas)):
+                if i == 20:
+                    ipdb.set_trace()
+                    print("test")
                 sys.stdout.write("\r" + str(i))
                 self.datas[i]['img'] = equalHist(self.datas[i]['img'])
 	    
@@ -400,10 +407,20 @@ class TestDataset():
         name = data['name']
         img = data['img'].numpy()
         shape = t.IntTensor([img.shape[0], img.shape[1]])
+        #if shape[0] > shape[1] and shape[1] < 200:
+        #    img = np.concatenate((img,np.ones((shape[0],shape[0]-shape[1],3)).astype(np.uint8)*5),axis=1)
+        #    shape[1] = shape[0]
         img = self.s_transform(img)
         return img, shape, name
     def __len__(self):
         return len(self.datas)
+
+    def getImgShapes(self):
+        shapes = []
+        for data in self.datas:
+            shapes.append((data['img'].shape[0], data['img'].shape[1]))
+
+        return Counter(elem for elem in shapes)
 
 
 def equalHist(img):
