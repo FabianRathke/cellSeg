@@ -24,13 +24,13 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 args.iterPrint = 5
 args.iterPlot = 20
-args.numEpochs = 100
+args.numEpochs = 200
 args.learnWeights = True
 args.dataAugm = True
 args.imgWidth = 256
 args.normalize = True
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,3' # 0,1,2,3,4
+os.environ['CUDA_VISIBLE_DEVICES'] = '2,3' # 0,1,2,3,4
 print("Using gpus {}.".format(os.environ['CUDA_VISIBLE_DEVICES']))
 
 normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
@@ -71,6 +71,7 @@ else:
 
 
 classSelect = [1]
+useExternal = 1
 
 # bodies unet
 for runClass in classSelect:
@@ -78,12 +79,13 @@ for runClass in classSelect:
     args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
 
     # ***** LOAD DATA ********
-    TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
-    TEST_PATH = './data/test_class' + str(runClass) + '.pth'
+    if runClass == 1 and useExternal:
+        TRAIN_PATH = ['./data/train_class' + str(runClass) + '.pth', './data/train_external_rgb.pth']
+    else:
+        TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
 
-    # Class 0: 541
-    # Class 1: 124
-    trainSamples = 541 if (runClass == 0) else 124
+    # Class 0: 541, Class 1: 124 (+30)
+    trainSamples = 541 if (runClass == 0) else (124 if not useExternal else 154)
 
     splits = loadData.createKSplits(trainSamples, 5, random_state=0)
     # use no validation set
@@ -107,8 +109,11 @@ for runClass in classSelect:
     model = nn.DataParallel(model).cuda()
 
     optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
-
     model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
+
+    optimizer = torch.optim.Adam(model.parameters(),lr = 0.075*1e-3); args.numEpochs = 10
+    model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
+
     util.save_model(model,args.modelName) 
 
 # boundary detection model
@@ -118,12 +123,13 @@ if 1:
         args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
 
         # ***** LOAD DATA ********
-        TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
-        TEST_PATH = './data/test_class' + str(runClass) + '.pth'
+        if runClass == 1 and useExternal:
+            TRAIN_PATH = ['./data/train_class' + str(runClass) + '.pth', './data/train_external_rgb.pth']
+        else:
+            TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
 
-        # Class 0: 541
-        # Class 1: 124
-        trainSamples = 541 if (runClass == 0) else 124
+        # Class 0: 541, Class 1: 124 (+30)
+        trainSamples = 541 if (runClass == 0) else (124 if not useExternal else 154)
 
         print("Load data")
         splits = loadData.createKSplits(trainSamples, 5, random_state=0)
@@ -149,6 +155,7 @@ if 1:
         model = nn.DataParallel(model).cuda()
 
         optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
-
+        model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
+        optimizer = torch.optim.Adam(model.parameters(),lr = 0.075*1e-3); args.numEpochs = 10
         model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
         util.save_model(model,args.modelName) 

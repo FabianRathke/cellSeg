@@ -445,8 +445,15 @@ def createKSplits(l, K, random_state = 0):
     return [arr[d*i:d*(i+1)] if i < K-1 else arr[d*i:] for i in range(K)]
 
 
-def readFromDisk(valIdx, path='/export/home/frathke/workspace/kaggle/cellSegmentation/data/train.pth'):
-    data = t.load(path)
+def readFromDisk(valIdx, path):
+    # read files from disk
+    if type(path) == list:
+        data = t.load(path[0])
+        for p in path[1:]:
+            data += t.load(p)
+    else:
+        data = t.load(path)
+
     # split into validation and training set
     trnIdx = np.setdiff1d(np.arange(len(data)),valIdx)
     

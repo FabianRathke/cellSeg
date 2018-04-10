@@ -118,14 +118,15 @@ def make_predictions(model, testdataloader, testAugm):
     return inputs_, results, test_ids
 
 
-classSelect = [0]
+classSelect = [1]
 writeCSV = 1
 # class 0 = grayscale
 for runClass in classSelect:
     if runClass == 0:
         numModel = [4,7]
     else:
-        numModel = [8,9]
+        #numModel = [8,9]
+        numModel = [0,2] # retrained with external dataset
     # ***** LOAD DATA ********
     TEST_PATH = './data/test_class' + str(runClass) + '.pth'
     cielab = True if runClass == 1 else False; cielab = False
