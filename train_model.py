@@ -96,7 +96,7 @@ for runClass in classSelect:
     lossFunc = util.soft_dice_loss
 
     print("Train Unet with dice loss")
-    cielab = True if runClass == 1 else False; cielab = False
+    cielab = True if runClass == 1 else False; #cielab = False
     histEq = True if runClass == 0 else False
     dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [1,1,0], cielab=cielab)
     dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
@@ -111,8 +111,10 @@ for runClass in classSelect:
     optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
     model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
 
-    optimizer = torch.optim.Adam(model.parameters(),lr = 0.075*1e-3); args.numEpochs = 10
+    optimizer = torch.optim.Adam(model.parameters(),lr = 0.075*1e-3); 
+    args.numEpochsSave = args.numEpochs; args.numEpochs = 10
     model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
+    args.numEpochs = args.numEpochsSave
 
     util.save_model(model,args.modelName) 
 
@@ -141,7 +143,7 @@ if 1:
         lossFunc = util.cross_entropy
 
         print("Train Unet with softmax")
-        cielab = True if runClass == 1 else False; cielab = False
+        cielab = True if runClass == 1 else False; #cielab = False
         histEq = True if runClass == 0 else False
         dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [0,0,0], cielab=cielab)
         dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)

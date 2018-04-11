@@ -373,9 +373,9 @@ class TestDataset():
         if normalize:
             print("Perform histogram equalization")
             for i in range(len(self.datas)):
-                if i == 20:
-                    ipdb.set_trace()
-                    print("test")
+                #if i == 20:
+                #    ipdb.set_trace()
+                #    print("test")
                 sys.stdout.write("\r" + str(i))
                 self.datas[i]['img'] = equalHist(self.datas[i]['img'])
 	    
@@ -412,6 +412,7 @@ class TestDataset():
         #    shape[1] = shape[0]
         img = self.s_transform(img)
         return img, shape, name
+
     def __len__(self):
         return len(self.datas)
 

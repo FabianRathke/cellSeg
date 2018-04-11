@@ -12,3 +12,6 @@ def fill_holes(labels):
 
     return labels_filled
 
+def estimate_cell_size(labels):
+    _, counts = np.unique(labels, return_counts=True)
+    return np.median(counts[1:])

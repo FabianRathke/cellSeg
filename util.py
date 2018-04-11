@@ -173,7 +173,7 @@ def competition_loss_func(inputs, targets = None, useCentroid = 0, printMessage=
                 rprop = regionprops(label_k)
                 n_label_k = np.sum(label_k)
                 if n_label_k > drop_threshold:
-                    n_hull    = rprop[0].convex_area - n_label_k
+                    n_hull = rprop[0].convex_area - n_label_k
                     if 0 and n_hull/n_label_k > 0.2:
                         if printMessage:
                             print("Split cells")
@@ -502,7 +502,7 @@ def train_model(model, optimizer, lossFunc, dataloader, validdataloader, args):
     return model
 
 
-def evaluate_model_tiled(model, data_orig, outClasses, block_size):
+def evaluate_model_tiled(model, data_orig, outClasses, block_size, testAugm):
   
     batchn, dims, rows_orig, cols_orig = data_orig.shape
 
@@ -593,8 +593,11 @@ def evaluate_model_tiled(model, data_orig, outClasses, block_size):
 
         patch_idx.shape = (-1,)
         
-		# Predict patch
-        output = model(patch).cpu()
+	# Predict patch
+        if sum(testAugm) == 0:
+            output = model(patch).cpu()
+        else:
+            output  = t.autograd.Variable(eval_augmentation(model, patch.data, testAugm))
         
         # Add to prediction result
         fuse_mask = np.ones((rows,cols))
