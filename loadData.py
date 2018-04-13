@@ -80,7 +80,10 @@ def process_split(file_path, clustermeans, cluster, has_mask=True):
         imgs = []
         for image in (file/'images').iterdir():
             img = io.imread(image)
-            # ipdb.set_trace()
+            if img.dtype == np.uint16:
+                img = (img/255).astype(np.uint8)
+                img = np.broadcast_to(np.expand_dims(img, axis=2),(img.shape[0], img.shape[1], 3))
+
             rows, cols, dims = img.shape
             imgmean = np.mean(np.reshape(img.copy(),(rows*cols,dims)), axis=0)
             imgmean.shape = (imgmean.shape[0], 1)
@@ -93,7 +96,6 @@ def process_split(file_path, clustermeans, cluster, has_mask=True):
                 imgs.append(img)
             else:
                 continue 
-            # imgs.append(img)
         
         #ipdb.set_trace()
         if len(imgs) == 1:
@@ -125,7 +127,6 @@ def process_split(file_path, clustermeans, cluster, has_mask=True):
             item['img'] = t.from_numpy(img)
             datas.append(item)
     return datas
-
 
 
 def crop_nparray(img, xy):
@@ -475,7 +476,6 @@ def main():
   
 
 def split_data():
-    df = pd.read_csv('class_means.csv', sep=',',header=None, index_col=False)
     classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 
 
     # Class 0 - grayscale
@@ -502,6 +502,30 @@ def split_data():
     train_data = process_split('../input/stage1_train/', classmean, 1)
     t.save(train_data, TRAIN_PATH)
 
+def split_data_new_data():
+    classmean = np.genfromtxt('class_means.csv', delimiter=',')[1:,1:] 
+
+    # Class 0 - grayscale
+    TEST_PATH = './data/test_final_class0.pth'
+    print('Create test dataset for Class 0 (grayscale)')
+    #test = process_split('../input/stage2_test_final/', classmean, 0, False)
+    #t.save(test, TEST_PATH)
+   
+    TRAIN_PATH = './data/train_new_class0.pth'
+    print('Create training dataset for Class 0 (grayscale)')
+    train_data = process_split('../input/stage1_test/', classmean, 0)
+    t.save(train_data, TRAIN_PATH)
+    
+    # Class 1 - RGB
+    TEST_PATH = './data/test_final_class1.pth'
+    print('Create test dataset for Class 1 (RGB)')
+    test = process_split('../input/stage2_test_final/', classmean, 1, False)
+    t.save(test, TEST_PATH)
+    
+    TRAIN_PATH = './data/train_new_class1.pth'
+    print('Create training dataset for Class 1 (RGB)')
+    train_data = process_split('../input/stage1_test/', classmean, 1)
+    t.save(train_data, TRAIN_PATH)
 
 if __name__ == "__main__":
     # main()

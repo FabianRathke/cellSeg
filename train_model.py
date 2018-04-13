@@ -70,22 +70,33 @@ else:
     ])
 
 
-classSelect = [1]
+classSelect = [0,1]
 useExternal = 1
+useTestset = 1
 
 # bodies unet
 for runClass in classSelect:
+    if runClass == 0:
+        args.numEpochs = 100
+    else:
+        args.numEpochs = 200
     args.modelName = './models/model-cl' + str(runClass) + '-0'
     args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
 
     # ***** LOAD DATA ********
     if runClass == 1 and useExternal:
         TRAIN_PATH = ['./data/train_class' + str(runClass) + '.pth', './data/train_external_rgb.pth']
+        if useTestset:
+            TRAIN_PATH = TRAIN_PATH + ['./data/train_new_class' + str(runClass) + '.pth']
     else:
         TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
+        if useTestset:
+            TRAIN_PATH = [TRAIN_PATH, './data/train_new_class' + str(runClass) + '.pth']
 
-    # Class 0: 541, Class 1: 124 (+30)
-    trainSamples = 541 if (runClass == 0) else (124 if not useExternal else 154)
+    # add labeled testset
+    
+    # Class 0: 541, Class 1: 124 (+30) [do not change, we take all samples anyway]
+    trainSamples = 546 if (runClass == 0) else (124 if not useExternal else 154)
 
     splits = loadData.createKSplits(trainSamples, 5, random_state=0)
     # use no validation set
@@ -119,45 +130,53 @@ for runClass in classSelect:
     util.save_model(model,args.modelName) 
 
 # boundary detection model
-if 1:
-    for runClass in classSelect:
-        args.modelName = './models/model-cl' + str(runClass) + '-0'
-        args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
+for runClass in classSelect:
+    if runClass == 0:
+        args.numEpochs = 100
+    else:
+        args.numEpochs = 200
+    
+    args.modelName = './models/model-cl' + str(runClass) + '-0'
+    args.submissionName = 'sub-dsbowl2018_cl' + str(runClass) + '-0'
 
-        # ***** LOAD DATA ********
-        if runClass == 1 and useExternal:
-            TRAIN_PATH = ['./data/train_class' + str(runClass) + '.pth', './data/train_external_rgb.pth']
-        else:
-            TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
+    # ***** LOAD DATA ********
+    if runClass == 1 and useExternal:
+        TRAIN_PATH = ['./data/train_class' + str(runClass) + '.pth', './data/train_external_rgb.pth']
+        if useTestset:
+            TRAIN_PATH = TRAIN_PATH + ['./data/train_new_class' + str(runClass) + '.pth']
+    else:
+        TRAIN_PATH = './data/train_class' + str(runClass) + '.pth'
+        if useTestset:
+            TRAIN_PATH = [TRAIN_PATH, './data/train_new_class' + str(runClass) + '.pth']
 
-        # Class 0: 541, Class 1: 124 (+30)
-        trainSamples = 541 if (runClass == 0) else (124 if not useExternal else 154)
+    # Class 0: 541, Class 1: 124 (+30)
+    trainSamples = 546 if (runClass == 0) else (124 if not useExternal else 154)
 
-        print("Load data")
-        splits = loadData.createKSplits(trainSamples, 5, random_state=0)
-        # use no validation set
-        splits[0] = np.zeros((0))
-        train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
+    print("Load data")
+    splits = loadData.createKSplits(trainSamples, 5, random_state=0)
+    # use no validation set
+    splits[0] = np.zeros((0))
+    train_data, val_data = loadData.readFromDisk(splits[0],TRAIN_PATH)
 
-        normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
-        lossFunc = util.cross_entropy
+    normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
+    lossFunc = util.cross_entropy
 
-        print("Train Unet with softmax")
-        cielab = True if runClass == 1 else False; #cielab = False
-        histEq = True if runClass == 0 else False
-        dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [0,0,0], cielab=cielab)
-        dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
+    print("Train Unet with softmax")
+    cielab = True if runClass == 1 else False; #cielab = False
+    histEq = True if runClass == 0 else False
+    dataset = loadData.Dataset(train_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [0,0,0], cielab=cielab)
+    dataloader = torch.utils.data.DataLoader(dataset, num_workers = 2, batch_size = 4)
 
 
-        validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [0,0,0], cielab=cielab)
-        validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
+    validset = loadData.Dataset(val_data, s_trans, t_trans, st_trans, args.dataAugm, histEq, args.imgWidth, maskConf = [0,0,0], cielab=cielab)
+    validdataloader = torch.utils.data.DataLoader(validset, num_workers = 2, batch_size = 4)
 
-        #model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
-        model = UNet2(3,3,learn_weights=args.learnWeights, softmax=True) # Kaggle notebook implementation
-        model = nn.DataParallel(model).cuda()
+    #model = UNet(1, depth=5, merge_mode='concat').cuda(0) # Alternative implementation
+    model = UNet2(3,3,learn_weights=args.learnWeights, softmax=True) # Kaggle notebook implementation
+    model = nn.DataParallel(model).cuda()
 
-        optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
-        model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
-        optimizer = torch.optim.Adam(model.parameters(),lr = 0.075*1e-3); args.numEpochs = 10
-        model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
-        util.save_model(model,args.modelName) 
+    optimizer = torch.optim.Adam(model.parameters(),lr = 0.2*1e-3)
+    model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
+    optimizer = torch.optim.Adam(model.parameters(),lr = 0.075*1e-3); args.numEpochs = 10
+    model = util.train_model(model, optimizer, lossFunc, dataloader, validdataloader, args)
+    util.save_model(model,args.modelName) 

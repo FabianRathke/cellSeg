@@ -386,6 +386,26 @@ def plot_all_predictions(model, dataloader, folder = 'plots/gallery'):
             plotExample(inputs[idx,:], masks[idx,:],masks_multiLabel[idx,0,:], output.data[idx,:], labels_pred, i, idx, 0, score, False, folder)
             plotLabels(inputs[idx,:], info, i, idx, score, folder)
 
+def rle_decoding(rle, w, h):
+    indices = []
+    for idx, cnt in zip(rle[0::2], rle[1::2]):
+        indices.extend(list(range(idx-1, idx+cnt-1)))  # RLE is 1-based index
+    mask = np.zeros(h*w, dtype=np.uint8)
+    mask[indices] = 255
+    return mask.reshape((w, h)).T
+
+
+def rleToMask(rleString,height,width):
+    rows,cols = height,width
+    rleNumbers = [int(numstring) for numstring in rleString.split(' ')]
+    rlePairs = np.array(rleNumbers).reshape(-1,2)
+    img = np.zeros(rows*cols,dtype=np.uint8)
+    for index,length in rlePairs:
+    	index -= 1
+    	img[index:index+length] = 255
+    img = img.reshape(cols,rows)
+    img = img.T
+    return img
 
 def rle_encoding(x):
     ''' From https://www.kaggle.com/keegil/keras-u-net-starter-lb-0-277 '''

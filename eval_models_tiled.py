@@ -44,7 +44,8 @@ def pred_labels(pred, pred_splits, shape, tiled):
     output_t[output_t < 0.5] = 0
     output_t[output_t > 0] = 1;
     output_t = output_t.astype(np.int8)
-
+    
+    ipdb.set_trace()
     # upsample
     if not tiled:
         preds_test_upsampled = resize(output_t[0], (shape[0], shape[1]),  mode='constant', preserve_range=True)
@@ -83,6 +84,8 @@ def write_csv(results, results_splits, images, tiled, test_ids, folder):
             #plt.subplot(121); plt.imshow(labels); plt.subplot(122); plt.imshow(labels_filled); plt.show(block=False)
             labels = labels_filled
 
+        #labels = post_processing.post_splitting(labels, item_splits)
+        #labels = new_labels
         # ############ PLOTTING ################
         util.plotExampleTest(images[i], item[0].cpu(), labels,  i, item[1], folder)
 
@@ -107,13 +110,15 @@ def get_cell_sizes(results, results_splits):
     return cell_sizes
 
 
-def make_predictions(model, testdataloader, testAugm, tiled, outChannels):
+def make_predictions(model, testdata, testAugm, tiled, outChannels):
     inputs_ = []; results = []
     test_ids = []
     print("Make predictions")
-    for i, data in enumerate(testdataloader):
+    #for i, data in enumerate(testdataloader):
+    for i in range(len(testdata)):
         sys.stdout.write("\r" + str(i))
-        inputs, shape, name = data
+        inputs, shape, name = testdata[i]
+        inputs = inputs.unsqueeze(0)
         if sum(testAugm) > 0:
             if tiled:
                 output = t.autograd.Variable(t.from_numpy(util.evaluate_model_tiled(model, t.autograd.Variable(inputs, volatile=True).cuda(), outChannels, 256, testAugm)))
@@ -168,18 +173,18 @@ def make_predictions_tiling(model, testdata, testdata_orig, testAugm, outChannel
     return inputs_, results, test_ids
 
 
-classSelect = [0]
-writeCSV = 0
-tiled = False
-
+classSelect = [0, 1]
+writeCSV = 1
 
 for runClass in classSelect:
     # obtain average cell size
     if runClass == 0:
-        numModel = [4,7]
+        #numModel = [4,7] 
+        numModel = [9,10] # retrained on testset
     else:
         #numModel = [8,9]
-        numModel = [1,3] # retrained with external dataset
+        #numModel = [1,3] # retrained with external dataset
+        numModel = [4,10] # external dataset + labeled testset
     # ***** LOAD DATA ********
 
     test_trans = tsf.Compose([
@@ -188,7 +193,7 @@ for runClass in classSelect:
         tsf.ToTensor(),
         normalize
     ])    
-    TEST_PATH = './data/test_class' + str(runClass) + '.pth'
+    TEST_PATH = './data/test_final_class' + str(runClass) + '.pth'
     cielab = True if runClass == 1 else False; #cielab = False
     testset = loadData.TestDataset(TEST_PATH, test_trans, args.normalize,cielab)
     testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
@@ -199,14 +204,13 @@ for runClass in classSelect:
     model.softmax = False
 
     tiled = False
-    inputs_, results, test_ids = make_predictions(model, testdataloader, [1,1,1,1], tiled, 2)
+    inputs_, results, test_ids = make_predictions(model, testset, [1,1,1,1], tiled, 2)
     
     # make predictions for all test samples
     print("Load model {}".format('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt'))
     model_splits = util.load_model('./models/model-cl' + str(runClass) + '-' + str(numModel[1]) + '.pt')
     model_splits = model_splits.module.eval()
-    _, results_splits, _ = make_predictions(model_splits, testdataloader, [1,1,1,1], tiled, 3)
-    results_splits
+    _, results_splits, _ = make_predictions(model_splits, testset, [1,1,1,1], tiled, 3)
    
     # the average cell size should be around 200
     cell_sizes = get_cell_sizes(results, results_splits)
@@ -226,7 +230,7 @@ for runClass in classSelect:
 
     if writeCSV:
         # upsample and encode
-        new_test_ids, rles = write_csv(results_tiled, results_splits_tiled, inputs_, tiled, test_ids, 'plots/testset-hist-' + str(runClass))
+        new_test_ids, rles = write_csv(results_tiled, results_splits_tiled, inputs_, tiled, test_ids, 'plots/testset-final-hist-' + str(runClass))
 
         sub = pd.DataFrame()
         sub['ImageId'] = new_test_ids
