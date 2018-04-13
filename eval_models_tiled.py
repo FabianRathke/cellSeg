@@ -45,7 +45,6 @@ def pred_labels(pred, pred_splits, shape, tiled):
     output_t[output_t > 0] = 1;
     output_t = output_t.astype(np.int8)
     
-    ipdb.set_trace()
     # upsample
     if not tiled:
         preds_test_upsampled = resize(output_t[0], (shape[0], shape[1]),  mode='constant', preserve_range=True)
@@ -103,7 +102,7 @@ def get_cell_sizes(results, results_splits):
         sys.stdout.write("\r" + str(i))
         item = results[i]
         item_splits = results_splits[i][0]
-        labels = pred_labels(item[0], item_splits, item[1][0], False)
+        labels = pred_labels(item[0], item_splits, item[1], False)
 
         cell_sizes.append(post_processing.estimate_cell_size(labels))
 
@@ -215,7 +214,6 @@ for runClass in classSelect:
     # the average cell size should be around 200
     cell_sizes = get_cell_sizes(results, results_splits)
 
-
     test_trans = tsf.Compose([
         tsf.ToTensor(),
         normalize
@@ -227,7 +225,6 @@ for runClass in classSelect:
     inputs_, results_tiled, test_ids = make_predictions_tiling(model, testset, testset_orig, [1,1,1,1], 2, cell_sizes)
     _, results_splits_tiled, _ = make_predictions_tiling(model_splits, testset, testset_orig, [1,1,1,1], 3, cell_sizes)
  
-
     if writeCSV:
         # upsample and encode
         new_test_ids, rles = write_csv(results_tiled, results_splits_tiled, inputs_, tiled, test_ids, 'plots/testset-final-hist-' + str(runClass))
