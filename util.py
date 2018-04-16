@@ -125,8 +125,12 @@ def plotExampleTest(img, mask, pred, batch, fileSize, folder = 'plots'):
     if folder == '':
         plt.show(block=False)
     else:
-        plt.savefig("{}/id_{}.png".format(folder,batch))
-        plt.close()
+        try:
+            plt.savefig("{}/id_{}.png".format(folder,batch))
+        except ValueError:
+            print("Image did not plot")
+                                
+    plt.close()
 
 def p(img):
     plt.figure(); plt.imshow(img); plt.show(block=False);

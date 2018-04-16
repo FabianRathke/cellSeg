@@ -86,7 +86,10 @@ def write_csv(results, results_splits, images, tiled, test_ids, folder):
         #labels = post_processing.post_splitting(labels, item_splits)
         #labels = new_labels
         # ############ PLOTTING ################
-        util.plotExampleTest(images[i], item[0].cpu(), labels,  i, item[1], folder)
+        try: 
+            util.plotExampleTest(images[i], item[0].cpu(), labels,  i, item[1], folder)
+        except ValueError:
+            print("Image {} did not plot".format(i))
 
         # ############### WRITE TO CSV ############
         rle = list(util.prob_to_rles(labels))
@@ -172,7 +175,7 @@ def make_predictions_tiling(model, testdata, testdata_orig, testAugm, outChannel
     return inputs_, results, test_ids
 
 
-classSelect = [0, 1]
+classSelect = [1]
 writeCSV = 1
 
 for runClass in classSelect:
