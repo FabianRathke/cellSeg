@@ -187,7 +187,7 @@ if  __name__ == "__main__":
         args.cls = [1]
 
     if not args.cielab:
-        args.cielab = False
+        args.cielab = True
 
     print("Training class " + ', '.join(map(str, args.cls)))
     print(args.heq)

@@ -1,7 +1,7 @@
 
 import os
 import numpy as np
-
+import sys
 import matplotlib.pyplot as plt
 import imageio
 
@@ -15,51 +15,112 @@ datasetPath = '../input/stage1_train/'
 trainDirNames = next(os.walk(datasetPath))[1]
 
 ntrain = len(trainDirNames)
-# ntrain = 10
-
+# ntrain = 50
+# ipdb.set_trace()
 
 meanmat = np.zeros((ntrain,3))
 stdmat  = np.zeros((ntrain,3))
+
+meanmat_gray = np.zeros((ntrain,3))
+stdmat_gray  = np.zeros((ntrain,3))
+
+meanmat_color = np.zeros((ntrain,3))
+stdmat_color  = np.zeros((ntrain,3))
+
+labelColor = [] #np.zeros((ntrain,1))
+imageColor = []
+
+def press(event):
+    print('press', event.key)
+    
+    classnum = int(event.key)
+    if classnum == 0 or classnum == 1:
+        labelColor.append(classnum)
+
+    sys.stdout.flush()
+    if event.key == 'x':
+        visible = xl.get_visible()
+        xl.set_visible(not visible)
+        fig.canvas.draw()
+    
+    plt.close(fig)
+
+c = 0
+g = 0
 for k in range(ntrain):
     
     name  = trainDirNames[k]
     path = datasetPath + name + '/images/' + name + '.png'
 
-    image = imageio.imread(path)[:,:,0:4] 
-    image =  (exposure.equalize_adapthist(np.array(image))*255).astype(np.uint8)
+    image = imageio.imread(path)[:,:,0:3] 
+    # image =  (exposure.equalize_adapthist(np.array(image))*255).astype(np.uint8)
 
     rows, cols, dims = image.shape
-    meanmat[k,:] = np.mean(np.reshape(image,(rows*cols,dims)), axis=0)
-    stdmat[k,:] = np.std(np.reshape(image,(rows*cols,dims)), axis=0)
 
+    # Gray 
+    if np.sum(np.std(image, axis=2)) == 0.0:
+        meanmat_gray[g,:] = np.mean(np.reshape(image,(rows*cols,dims)), axis=0)
+        stdmat_gray[g,:] = np.std(np.reshape(image,(rows*cols,dims)), axis=0)
+        g = g + 1
+    else:
 
-print(meanmat)
-print(stdmat)
+        # ipdb.set_trace()
+        meanmat_color[c,:] = np.mean(np.reshape(image,(rows*cols,dims)), axis=0)
+        stdmat_color[c,:] = np.std(np.reshape(image,(rows*cols,dims)), axis=0)
+        
+        fig, ax = plt.subplots()
+        fig.canvas.mpl_connect('key_press_event', press)
+        ax.imshow(image)
+        plt.show()    
 
-setmean = np.mean(meanmat,axis=0)
-setstd  = np.std(stdmat,axis=0)
+        imageColor.append((image, labelColor[c]))
+        
+        print(labelColor[c])
+        c = c+1
+  
+ipdb.set_trace()
+import pandas as pd
+df = pd.DataFrame(imageColor)
+df.to_csv("imageColor.csv")
 
-print("Dataset mean")
-print(setmean)
-print(setmean/255)
-print("Dataset std")
-print(setstd)
-print(setstd/255)
+#############################################################################
+
+meanmat_gray = meanmat_gray[0:g,:]
+meanmat_color = meanmat_color[0:c,:] 
+
+stdmat_gray = stdmat_gray[0:g,:]
+stdmat_color = stdmat_color[0:c,:]
+
+#meanmat[0,:] = np.mean(meanmat_gray, axis=0)
+
+#print(meanmat)
+#print(stdmat)
+
+ipdb.set_trace()
+
+#setmean = np.mean(meanmat,axis=0)
+#setstd  = np.std(stdmat,axis=0)
+
+#print("Dataset mean")
+#print(setmean)
+#print(setmean/255)
+#print("Dataset std")
+#print(setstd)
+#print(setstd/255)
 
 
 # ***** KMEANS CLUSTERING *****
 from sklearn.cluster import KMeans
 
-X = meanmat # [datapoints X features]
+# X = meanmat_color # [datapoints X features]
+X = np.concatenate( (meanmat_color, stdmat_color), axis=1)
 
 n_clusters = 2
 y_pred = KMeans(n_clusters=n_clusters).fit_predict(X)
-def equalHist(img):
-    img = exposure.equalize_adapthist(img)
-    #img = denoise_tv_chambolle(img, weight=0.02, multichannel=False)
-    return 
-
-
+#def equalHist(img):
+#    img = exposure.equalize_adapthist(img)
+#    #img = denoise_tv_chambolle(img, weight=0.02, multichannel=False)
+#    return 
 
 nClusters = np.zeros((n_clusters))
 for k in range(n_clusters):
@@ -92,25 +153,37 @@ for k in range(1,ndisp+1):
         plt.imshow(image)
 
 
-classmean = np.zeros((n_clusters,3))
-classn    = np.zeros((n_clusters))
+classmean_color = np.zeros((n_clusters,3))
+classn          = np.zeros((n_clusters))
 
+# ipdb.set_trace()
 
-
-for i in range(ntrain):
-	for c in range(n_clusters):
-		if y_pred[i] == c:
-			classmean[c,:] += meanmat[i,:]
-			classn[c] += 1
+#for i in range(meanmat_color.shape[0]):
+#	for c in range(n_clusters):
+#		if y_pred[i] == c:
+#			classmean_color[c,:] += meanmat_color[i,:]
+#			classn[c] += 1
 	
-classmean = classmean / (classn[:,None])
+for c in range(n_clusters):
+    classmean_color[c,:] = np.mean(meanmat_color[y_pred == c,:], axis=0)
+
+#classmean_color = classmean_color / (classn[:,None])
+
+classmean_gray = np.mean(meanmat_gray, axis=0)
+
+
+classmean = np.zeros((n_clusters+1,3))
+classmean[0,:] = classmean_gray
+classmean[1:,:] = classmean_color
+
 
 
 ipdb.set_trace()
+plt.show()
 
 import pandas as pd 
 df = pd.DataFrame(classmean)
-df.to_csv("class_means_norm.csv")
+df.to_csv("class3_means.csv")
 
 
 

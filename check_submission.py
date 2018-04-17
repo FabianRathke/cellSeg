@@ -63,11 +63,12 @@ def correct_csv(testset, df):
 
         try:
             rleNumbers = [int(numstring) for numstring in rleString.split(' ')]
-            if (rleNumbers[-1] + rleNumbers[-2]) >= rows*cols:
+            if (rleNumbers[-1] + rleNumbers[-2] - 1) > rows*cols:
                 #print("out of bounds")
-                x = rleNumbers
-                x[-1] -= 1
-                df['EncodedPixels'][i] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
+                rleNumbers[-1] -= 1
+                # ipdb.set_trace()
+                df['EncodedPixels'][i] = ' '.join(str(e) for e in rleNumbers)
+                # df['EncodedPixels'][i] = pd.Series(rleNumbers).apply(lambda x: ' '.join(str(y) for y in x))
 
         except:
             #print("idx %i: %s" % (i, rleString))
@@ -81,7 +82,7 @@ df1_correctd = correct_csv(testset1,df1)
     
 print("Correcting grayscale")    
 df0 = pd.read_csv('./sub-dsbowl2018_cl0-32.csv')
-df0_correctd = correct_csv(testset0,df0)
+df0_corrected = correct_csv(testset0,df0)
 
 # ipdb.set_trace()
 

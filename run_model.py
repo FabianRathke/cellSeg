@@ -29,7 +29,7 @@ model_cl1 = util.load_model('model-cl1-4.pt')
 outClasses = 2
 
 
-TEST_PATH = './data/test_class1.pth'
+TEST_PATH = './data/test.pth'
 # TEST_PATH = './data/train_class1.pth'
 
 normalize = tsf.Normalize(mean = [0.5,0.5,0.5],std = [0.5,0.5,0.5])
@@ -53,7 +53,7 @@ classmeans /= 255.0
 # util.plot_results_for_images(model_cl0, dataloader)
 
 # ***** EVALUATION ********
-testset = loadData.TestDataset(TEST_PATH, test_trans, normalize=False, cielab=False)
+testset = loadData.TestDataset(TEST_PATH, test_trans, normalize=False, cielab=True)
 testdataloader = t.utils.data.DataLoader(testset,num_workers=2,batch_size=1)
 
 # make predictions for all test samples
@@ -82,7 +82,7 @@ for i, data in enumerate(testdataloader):
         
     # ipdb.set_trace()
     c = np.int( np.argmin(cdist) )
-    #if c == 0:
+    if c == 0:
     #    print("Class 0")
         #plt.figure(1)
         #plt.subplot(1,2,1)
@@ -97,14 +97,14 @@ for i, data in enumerate(testdataloader):
         #x_test[0,:] = t.from_numpy(img).type(torch.FloatTensor).permute(2,0,1).cuda()
     #    output = util.eval_augmentation(model_cl0, inputs, testAugm)
         # output = model_cl0(x_test)
-        # output = util.evaluate_model_tiled(model_cl0, x_test, outClasses, 256)
+        output = util.evaluate_model_tiled(model_cl0, x_test, outClasses, 256)
         # ipdb.set_trace()
 
-    #else:
+    else:
         # continue
-        # output = util.evaluate_model_tiled(model_cl1, x_test, outClasses, 256)
+        output = util.evaluate_model_tiled(model_cl1, x_test, outClasses, 256)
         # output = model_cl1(x_test)
-    output = util.eval_augmentation(model_cl1, inputs, testAugm)
+    # output = util.eval_augmentation(model_cl1, inputs, testAugm)
   
     #ipdb.set_trace() 
 
